@@ -8,6 +8,7 @@ import HomeCreditCard from "./components/HomeCreditCard";
 import HomeDonationCard from "./components/HomeDonationCard";
 import HomeNews from "./components/HomeNews";
 import StudentMenuNotice from "./components/StudentMenuNotice";
+import HomePayslipCard from "./components/HomePayslipCard";
 
 import { getTierInfoByScore } from "../credit/utils/tierUtils";
 
@@ -344,6 +345,13 @@ const StudentDashboard = () => {
             </section>
           )}
           <StudentMenuNotice />
+          {!isTeacher && (
+            <HomePayslipCard
+              classId={classId}
+              userData={currentUser}
+              currencyUnit={currencyUnit}
+            />
+          )}
           <div className="relative">
             <div
               data-tour="dashboard-card-preview"
