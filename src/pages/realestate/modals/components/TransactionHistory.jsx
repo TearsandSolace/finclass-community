@@ -56,6 +56,9 @@ const getTypeInfo = (item) => {
   if (item.type === 'reclaim') {
     return { label: '강제 회수', color: 'bg-rose-100 text-rose-700' };
   }
+  if (item.type === 'state_buyback') {
+    return { label: '국가 매각', color: 'bg-emerald-100 text-emerald-700' };
+  }
   if (item.type === 'market_adjustment') {
     if (item.changeMode === 'fixed') {
       return { label: '시세 직접 수정', color: 'bg-amber-100 text-amber-700' };

@@ -119,6 +119,26 @@ export const executeClassFundRealEstateTradeAPI = async ({
   }
 };
 
+export const sellRealEstateToStateAPI = async ({ classId, deskId }) => {
+  try {
+    const sellFn = httpsCallable(functions, 'sellRealEstateToState');
+    const result = await sellFn({
+      classId,
+      deskId,
+      clientRequestId: createRealEstateClientRequestId(),
+    });
+    return result.data;
+  } catch (error) {
+    console.error('Cloud Function Error (Sell Real Estate To State):', error);
+    const message =
+      (typeof error?.details === 'string' && error.details) ||
+      error?.details?.message ||
+      error?.message ||
+      '국가 매각 중 서버 오류가 발생했습니다.';
+    throw new Error(message);
+  }
+};
+
 export const updateRealEstateRentContractsBulkAPI = async ({
   classId,
   deskIds,

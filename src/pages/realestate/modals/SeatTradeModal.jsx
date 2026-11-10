@@ -110,6 +110,7 @@ const SeatTradeModal = ({
     cancelContract,
     executePayment,
     executeFundTrade,
+    sellToState,
   } = useRealEstate(classId, user, showFeedback);
 
   const [askingPrice, setAskingPrice] = useState(0);
@@ -273,6 +274,29 @@ const SeatTradeModal = ({
   };
 
 
+  const hasActiveAuction = Boolean(
+    resolvedDesk.auctionSummary?.auctionId || resolvedDesk.foreclosureInfo?.auctionId,
+  );
+  const canSellToState =
+    !isStateOwned &&
+    !isFundOwned &&
+    !isFundMode &&
+    !canOpenContract &&
+    !resolvedDesk.isForSale &&
+    !hasActiveAuction &&
+    resolvedDesk.isActive !== false &&
+    (isOwner || canActAsTeacher);
+
+  const handleSellToState = async () => {
+    if (!ensureSystemEnabled() || hookLoading) return;
+    const ownerLabel = isOwner ? '이 부동산' : `${resolvedDesk.ownerName || '학생'} 소유 부동산`;
+    const confirmed = (await appConfirm(
+      `${ownerLabel}을 국가에 ${formatCurrency(propertyPrice)}으로 매각할까요?\n매각대금은 국고에서 소유자에게 지급되고, 자리는 국가 소유가 되어 국가 경매에 다시 올릴 수 있습니다.`,
+    ));
+    if (!confirmed) return;
+    await sellToState(resolvedDesk.id);
+  };
+
   const seatStatus = getClassroomSeatStatus(resolvedDesk, { userUid: currentUserUid, isTeacher, isAccountSwitching });
   const showSaleFooter = viewMode === 'info' && isSeller && !isFundMode && !canOpenContract && !resolvedDesk.isForSale;
   const cancelSaleInput = () => {
@@ -328,6 +352,29 @@ const SeatTradeModal = ({
                   임대 관리로 이동
                 </Button>
               </div>
+            )}
+
+            {canSellToState && (
+              <section className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 md:p-5" aria-label="국가에 매각">
+                <h3 className="text-base font-extrabold text-emerald-900">국가에 팔기</h3>
+                <p className="mt-1 text-sm leading-relaxed text-emerald-800/80">
+                  {isOwner
+                    ? '학생에게 팔지 않고 국가에 바로 팔 수 있어요. 국가가 산 자리는 국가 경매로 다시 나옵니다.'
+                    : `${resolvedDesk.ownerName || '학생'} 소유 자리를 국가가 사들입니다. 대금은 국고에서 소유자에게 지급됩니다.`}
+                </p>
+                <Button size="md"
+                  className="mt-3"
+                  onClick={handleSellToState}
+                  disabled={!systemEnabled || hookLoading}
+                  tone="emerald"
+                  kind="solid"
+                  fullWidth
+                  rounded="lg"
+                  icon={ArrowRightCircle}
+                >
+                  국가에 {formatCurrency(propertyPrice)}으로 매각
+                </Button>
+              </section>
             )}
 
             <div className="mt-2">

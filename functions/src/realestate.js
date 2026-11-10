@@ -1966,6 +1966,244 @@ exports.executeClassFundRealEstateTrade = onCall(async (request) => {
     });
 });
 
+/**
+ * 개인 소유 부동산을 국가에 매각한다.
+ * - 소유자 본인 또는 부동산 관리 권한자(교사·관리자)가 실행할 수 있다.
+ * - 국가는 마지막 매입가(없으면 공시가)로 국고에서 매입하고 대금을 소유자에게 지급한다.
+ * - 매각 후 좌석은 국유가 되어 공공 경매로 다시 등록할 수 있다.
+ */
+exports.sellRealEstateToState = onCall(async (request) => {
+    const { classId, deskId } = request.data || {};
+    if (!classId || !deskId) {
+        throw new HttpsError("invalid-argument", "classId와 deskId가 필요합니다.");
+    }
+
+    const actorCtx = getRealEstateAuthContext(request, classId);
+    const actorUid = actorCtx.uid;
+    const globalConfig = await getGlobalConfig();
+    const batchKey = resolveAggregateBatchKey(
+        request.data,
+        `realestate_state_buyback_${deskId}_${Date.now()}`,
+    );
+
+    return runRealEstateTransaction(db, async (transaction) => {
+        const layoutRef = db.doc(`classes/${classId}/real_estate/layout`);
+        const configRef = db.doc(`classes/${classId}/real_estate/config`);
+        const classRef = db.doc(`classes/${classId}`);
+        const taxSummaryRef = db.doc(`classes/${classId}/dashboardSummary/taxSummary`);
+
+        const [layoutSnap, configSnap, classSnap, taxSummarySnap] = await Promise.all([
+            readRealEstateLayout(db, layoutRef, transaction),
+            transaction.get(configRef),
+            transaction.get(classRef),
+            transaction.get(taxSummaryRef),
+        ]);
+
+        if (!layoutSnap.exists) {
+            throw new HttpsError("not-found", "교실 배치 정보를 찾을 수 없습니다.");
+        }
+        if (!classSnap.exists) {
+            throw new HttpsError("not-found", "학급 정보를 찾을 수 없습니다.");
+        }
+
+        const configData = configSnap.exists ? configSnap.data() || {} : {};
+        if (configData.enabled === false) {
+            throw new HttpsError("failed-precondition", "부동산 시스템이 비활성화 상태입니다.");
+        }
+
+        const classData = classSnap.data() || {};
+        const groups = Array.isArray(layoutSnap.data()?.groups) ? layoutSnap.data().groups : [];
+        let targetGroupIndex = -1;
+        let targetDeskIndex = -1;
+        let desk = null;
+        for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
+            const deskIndex = (groups[groupIndex]?.desks || []).findIndex(
+                (entry) => entry?.id === deskId,
+            );
+            if (deskIndex >= 0) {
+                targetGroupIndex = groupIndex;
+                targetDeskIndex = deskIndex;
+                desk = groups[groupIndex].desks[deskIndex];
+                break;
+            }
+        }
+
+        if (!desk) {
+            throw new HttpsError("not-found", "해당 자리를 찾을 수 없습니다.");
+        }
+        if (!desk.ownerId) {
+            throw new HttpsError("failed-precondition", "이미 국가 소유인 자리입니다.");
+        }
+        if (isClassFundOwnedDesk(desk)) {
+            throw new HttpsError(
+                "failed-precondition",
+                "기금 소유 부동산은 기금 화면에서 국가에 매각해 주세요.",
+            );
+        }
+        const sellerUid = desk.ownerId;
+        if (sellerUid !== actorUid && !actorCtx.canManageRealEstate) {
+            throw new HttpsError("permission-denied", "본인 소유 부동산만 국가에 매각할 수 있습니다.");
+        }
+        if (desk.isActive === false) {
+            throw new HttpsError("failed-precondition", "비활성 좌석은 거래할 수 없습니다.");
+        }
+        if (
+            desk.auctionSummary?.auctionId ||
+            desk.foreclosureInfo?.auctionId ||
+            desk.tradeStatus === "contracting"
+        ) {
+            throw new HttpsError(
+                "failed-precondition",
+                "진행 중인 계약이나 경매가 있는 좌석은 국가에 매각할 수 없습니다.",
+            );
+        }
+
+        const sellerRef = db.doc(`classes/${classId}/students/${sellerUid}`);
+        const sellerSnap = await transaction.get(sellerRef);
+        if (!sellerSnap.exists) {
+            throw new HttpsError("not-found", "소유자 정보를 찾을 수 없습니다.");
+        }
+
+        const salePrice = Math.max(
+            0,
+            Math.floor(Number(desk.lastPurchasePrice || desk.price || 0)),
+        );
+        if (!Number.isFinite(salePrice) || salePrice <= 0) {
+            throw new HttpsError("failed-precondition", "매각 가격을 확인할 수 없는 자리입니다.");
+        }
+
+        const taxSummary = taxSummarySnap.exists ? taxSummarySnap.data() || {} : {};
+        const taxBalance =
+            Math.floor(Number(taxSummary.totalIncome || 0)) -
+            Math.floor(Number(taxSummary.totalExpense || 0));
+        if (taxBalance < salePrice) {
+            throw new HttpsError(
+                "failed-precondition",
+                `국고 잔액이 부족해 국가가 매입할 수 없습니다. (필요 금액: ${salePrice.toLocaleString()})`,
+            );
+        }
+
+        const sellerData = sellerSnap.data() || {};
+        const sellerName = String(
+            desk.ownerName || sellerData.name || sellerData.displayName || "이름 없음",
+        );
+        const deskLabel = getResolvedDeskLabel(desk);
+        const logContext = {
+            config: globalConfig,
+            planType: classData.planType || "FREE",
+            serviceName: "realestate",
+        };
+        const now = FieldValue.serverTimestamp();
+        const nowIso = new Date().toISOString();
+        const ledgerRef = db.collection(`classes/${classId}/real_estate/ledger/transactions`).doc();
+
+        // 국가 매입은 현금과 국고가 같은 트랜잭션에서 바로 움직이므로 요금제 게이트로 미루지 않는다.
+        const taxExpenseResult = stageTaxExpense(
+            transaction,
+            classId,
+            {
+                amount: salePrice,
+                description: `${sellerName} 소유 ${deskLabel} 국가 매입`,
+                source: "real_estate",
+                expenseType: "state_asset_buyback",
+                category: "real_estate",
+                studentUid: sellerUid,
+                studentName: sellerName,
+            },
+            actorUid,
+            {
+                ...logContext,
+                skipFeatureGate: true,
+                customId: `realEstateStateBuyback_${ledgerRef.id}`,
+                aggregateMeta: {
+                    group: "realestate_state_buyback",
+                    batchKey,
+                    pageKey: "realestate",
+                    actorUid,
+                    mode: "student_state_sale",
+                },
+                detailLines: [
+                    {
+                        id: `${toSafeId(deskId, "desk")}_state_buyback`,
+                        amount: salePrice,
+                        source: "real_estate",
+                        expenseType: "state_asset_buyback",
+                        category: "real_estate",
+                        description: `${deskLabel} 국가 매입`,
+                        studentUid: sellerUid,
+                        studentName: sellerName,
+                        relatedDoc: { collection: "real_estate_ledger", id: ledgerRef.id },
+                    },
+                ],
+            },
+        );
+        if (taxExpenseResult?.skipped || !taxExpenseResult?.id) {
+            throw new HttpsError("failed-precondition", "국가 매입 지출을 기록할 수 없습니다.");
+        }
+
+        transaction.update(sellerRef, {
+            "assets.cash": FieldValue.increment(salePrice),
+        });
+
+        const updatedGroups = [...groups];
+        const targetGroup = { ...updatedGroups[targetGroupIndex] };
+        const updatedDesks = [...(targetGroup.desks || [])];
+        updatedDesks[targetDeskIndex] = {
+            ...desk,
+            ownerId: null,
+            ownerName: "",
+            ownerType: "state",
+            ownerFundId: null,
+            ownerSinceAt: null,
+            ownerSource: "state_buyback",
+            ownerUpdatedAt: nowIso,
+            lastPurchasePrice: salePrice,
+            tradeStatus: "idle",
+            isForSale: false,
+            askingPrice: 0,
+            buyerId: null,
+            contractState: null,
+            purchaseRequests: [],
+            hasTradeHistory: true,
+        };
+        targetGroup.desks = updatedDesks;
+        updatedGroups[targetGroupIndex] = targetGroup;
+        stageRealEstateLayout(transaction, layoutRef, {
+            groups: updatedGroups,
+            updatedAt: now,
+        });
+
+        transaction.set(ledgerRef, {
+            type: "state_buyback",
+            deskId,
+            deskLabel,
+            buyerId: "STATE",
+            buyerName: getClassDisplayName(classData),
+            sellerId: sellerUid,
+            sellerName,
+            amount: salePrice,
+            tradePrice: salePrice,
+            sellerNetIncome: salePrice,
+            taxExpenseId: taxExpenseResult.id,
+            requestedBy: actorUid,
+            timestamp: now,
+        });
+
+        stageActivityLog(transaction, classId, {
+            studentUid: sellerUid,
+            type: "income",
+            category: "real_estate",
+            subCategory: "sell_to_state",
+            amount: salePrice,
+            description: `${deskLabel} 국가 매각 (매각가: ${salePrice})`,
+            currency: "class_currency",
+            relatedDoc: { collection: "real_estate_ledger", id: ledgerRef.id },
+        }, logContext);
+
+        return { success: true, deskId, price: salePrice };
+    });
+});
+
 exports.__cancelClassFundRealEstateUsage = async ({
     classId,
     usageId,

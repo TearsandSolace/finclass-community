@@ -9,6 +9,7 @@ import {
   createRealEstateClientRequestId,
   payRentAPI,
   payRentDepositAPI,
+  sellRealEstateToStateAPI,
   settleRentDepositAPI,
   updateDeskStateAPI,
 } from '../services/realEstateService';
@@ -245,6 +246,31 @@ export const useRealEstate = (classId, user, showFeedback) => {
     }
   };
 
+  const sellToState = async (deskId) => {
+    if (actionInFlightRef.current) return false;
+
+    actionInFlightRef.current = true;
+    setLoading(true);
+    try {
+      await ensureSystemEnabled();
+      const result = await sellRealEstateToStateAPI({ classId, deskId });
+      if (result?.success) {
+        showFeedback(
+          `국가에 ${formatCurrency(result.price)}으로 매각했습니다. 이제 국가 경매에 다시 올릴 수 있습니다.`,
+          'success',
+        );
+        return true;
+      }
+      return false;
+    } catch (error) {
+      showFeedback(error.message || '국가 매각 중 오류가 발생했습니다.', 'error');
+      return false;
+    } finally {
+      actionInFlightRef.current = false;
+      setLoading(false);
+    }
+  };
+
   const payRent = async ({
     deskId,
     amount = 0,
@@ -396,6 +422,7 @@ export const useRealEstate = (classId, user, showFeedback) => {
     cancelContract,
     executePayment,
     executeFundTrade,
+    sellToState,
     payRent,
     payRentDeposit,
     settleRentDeposit,
