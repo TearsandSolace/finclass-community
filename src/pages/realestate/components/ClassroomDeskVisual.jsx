@@ -56,10 +56,10 @@ const ClassroomDeskVisual = ({ label, number, studentName, teamId, rotation = 0,
                     <em>임대인</em>
                     <strong className={isStateOwner ? 'classroom-desk__owner--state' : 'classroom-desk__owner--private'}>{ownerName || '국가'}</strong>
                   </span>
-                  <span className="classroom-desk__party" title={isOwnerOccupied ? '임대인이 직접 앉아 있음' : `임차인 ${studentName || '없음'}`}>
+                  <span className="classroom-desk__party" title={isOwnerOccupied ? '자가: 임대인이 직접 앉아 있음' : `임차인 ${studentName || '없음'}`}>
                     <em>임차인</em>
                     <strong className={isOwnerOccupied ? 'classroom-desk__tenant--self' : studentName ? 'classroom-desk__tenant' : 'classroom-desk__tenant--empty'}>
-                      {isOwnerOccupied ? '본인 거주' : studentName || '빈자리'}
+                      {isOwnerOccupied ? '자가' : studentName || '빈자리'}
                     </strong>
                   </span>
                   <small title={priceText}>{priceText}</small>

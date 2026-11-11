@@ -1,9 +1,9 @@
 // src/firebase.js
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { initializeFirestore, memoryLocalCache } from "firebase/firestore";
-import { getFunctions } from "firebase/functions";
-import { getStorage } from "firebase/storage";
+import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { connectFirestoreEmulator, initializeFirestore, memoryLocalCache } from "firebase/firestore";
+import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider, ReCaptchaV3Provider } from "firebase/app-check";
 import { readFirebaseClientConfiguration } from "./config/firebaseClientConfig";
 const {
@@ -45,10 +45,6 @@ if (process.env.REACT_APP_USE_EMULATORS === "true") {
   if (!isLocalhost || !firebaseConfig.projectId.startsWith("demo-")) {
     throw new Error("Local emulators require localhost and a demo- project ID.");
   }
-  const { connectAuthEmulator } = require("firebase/auth");
-  const { connectFirestoreEmulator } = require("firebase/firestore");
-  const { connectFunctionsEmulator } = require("firebase/functions");
-  const { connectStorageEmulator } = require("firebase/storage");
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);

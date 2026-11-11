@@ -83,6 +83,7 @@ const summarizeDesk = (desk = {}) => ({
     contractState: pickContractState(desk.contractState),
     rentContractId: desk.rentContractId || null,
     rentContractStatus: desk.rentContractStatus || "",
+    rentType: desk.rentType || "",
     rentStartAt: desk.rentStartAt || null,
     rentLastDateAt: desk.rentLastDateAt || null,
     rentTenantId: desk.rentTenantId || null,
