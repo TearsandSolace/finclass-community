@@ -593,9 +593,10 @@ const Store = () => {
       displayAllItems.filter(
         (item) =>
           !isRandomBoxItem(item) &&
-          (isTeacher || !isVipStoreItem(item, categoryMap)),
+          // VIP 상점 상품(창업권 등)은 교사 계정이어도 POS에 띄우지 않고 VIP 상점에서만 판매한다.
+          !isVipStoreItem(item, categoryMap),
       ),
-    [categoryMap, displayAllItems, isTeacher],
+    [categoryMap, displayAllItems],
   );
   const manageableCategories = useMemo(
     () =>
