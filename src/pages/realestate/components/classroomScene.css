@@ -236,6 +236,15 @@
 .classroom-desk--viewer .classroom-desk__status { top: 19%; right: 10%; transform: none; font-size: calc(11px * var(--desk-view-type-scale, 1)); }
 .classroom-desk--viewer .classroom-desk__viewer-content strong { font-size: calc(24px * var(--desk-view-type-scale, 1)); }
 .classroom-desk--viewer .classroom-desk__viewer-content small { font-size: calc(18px * var(--desk-view-type-scale, 1)); font-variant-numeric: tabular-nums; }
+/* 전체 부동산 보기: 임대인·임차인·가격 세 줄을 한 책상에 담는다. */
+.classroom-desk__viewer-content--parties { top: 26%; bottom: 21%; gap: 0.08em; }
+.classroom-desk__party { display: flex; align-items: baseline; justify-content: center; gap: 0.3em; max-width: 100%; min-width: 0; }
+.classroom-desk__party em { flex: none; font-style: normal; font-weight: 700; color: #64748b; font-size: calc(10px * var(--desk-view-type-scale, 1)); }
+.classroom-desk--viewer .classroom-desk__viewer-content--parties strong { font-size: calc(17px * var(--desk-view-type-scale, 1)); min-width: 0; }
+.classroom-desk--viewer .classroom-desk__viewer-content--parties small { font-size: calc(13px * var(--desk-view-type-scale, 1)); color: #475569; }
+.classroom-desk__viewer-content .classroom-desk__tenant { color: #0f766e; }
+.classroom-desk__viewer-content .classroom-desk__tenant--self { color: #7c3aed; }
+.classroom-desk__viewer-content .classroom-desk__tenant--empty { color: #94a3b8; }
 
 .classroom-desk__team-dot {
   position: absolute;

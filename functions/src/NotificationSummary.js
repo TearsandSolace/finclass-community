@@ -6,6 +6,7 @@ const { rentPropertyFields } = require("../utils/realEstateProjectionChanges");
 const admin = require("../firebaseAdminCompat");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const {
     formatDateKeyInKST,
     startOfDayInKST,
@@ -4853,6 +4854,30 @@ exports.syncRealEstateNotificationSummary = onDocumentWritten(
         const before = event.data?.before?.data(), after = event.data?.after?.data();
         if (after?.storageSchemaVersion === 3 && before?.storageSchemaVersion === 3 && sameRealEstateSource(before.groups, after.groups)) return;
         await recomputeRealEstateNotificationSummary(classId);
+    },
+);
+
+// 임대료 납부일은 날짜가 지나면서 돌아오므로, 부동산 데이터가 바뀌지 않는 날에도
+// 학생 홈 화면·사이드바의 임대료 알림이 맞도록 매일 아침 다시 계산한다.
+exports.refreshDailyRealEstateRentDueAlerts = onSchedule(
+    {
+        schedule: "20 0 * * *",
+        timeZone: "Asia/Seoul",
+        region: "asia-northeast3",
+        timeoutSeconds: 540,
+        memory: "512MiB",
+    },
+    async () => {
+        const classesSnap = await db.collection("classes").get();
+        for (const classSnap of classesSnap.docs) {
+            const layoutSnap = await db.doc(`classes/${classSnap.id}/real_estate/layout`).get();
+            if (!layoutSnap.exists) continue;
+            try {
+                await recomputeRealEstateNotificationSummary(classSnap.id);
+            } catch (error) {
+                console.error("[refreshDailyRealEstateRentDueAlerts] class failed:", classSnap.id, error);
+            }
+        }
     },
 );
 

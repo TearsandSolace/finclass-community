@@ -9,6 +9,7 @@ import HomeDonationCard from "./components/HomeDonationCard";
 import HomeNews from "./components/HomeNews";
 import StudentMenuNotice from "./components/StudentMenuNotice";
 import HomePayslipCard from "./components/HomePayslipCard";
+import HomeActionAlerts from "./components/HomeActionAlerts";
 
 import { getTierInfoByScore } from "../credit/utils/tierUtils";
 
@@ -345,6 +346,7 @@ const StudentDashboard = () => {
             </section>
           )}
           <StudentMenuNotice />
+          {!isTeacher && <HomeActionAlerts />}
           {!isTeacher && (
             <HomePayslipCard
               classId={classId}

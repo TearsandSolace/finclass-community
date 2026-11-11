@@ -344,10 +344,10 @@ const ClassroomViewer = ({
                       {desk.label || `${desk.number ?? "-"}번 좌석`}
                     </p>
                     <p className="mt-1 truncate font-black text-slate-900">
-                      {desk.studentName || "빈 좌석"}
+                      {desk.studentName ? `임차인 ${desk.studentName}` : "빈 좌석"}
                     </p>
                     <p className="mt-1 truncate text-xs text-slate-500">
-                      소유 {desk.ownerName || "국가"}
+                      임대인 {desk.ownerName || "국가"}
                     </p>
                   </div>
                   <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${rentStatus.isOverdue && canSeeOverdue ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'}`}>
@@ -485,11 +485,12 @@ const ClassroomViewer = ({
             const status = getSeatStatus(desk);
             return (
               <button type="button" onClick={() => handleDeskClick(desk)}
-                aria-label={`${desk.label || `${desk.number}번`} ${viewMode === "property" ? `${desk.ownerName || "국가"} 소유, 현재가 ${formatDisplayMoney(getDeskPrice(desk))} ${currencyUnit || ""}, ${status.label}` : desk.studentName || "미배정"} 상세 보기`}
+                aria-label={`${desk.label || `${desk.number}번`} ${viewMode === "property" ? `임대인 ${desk.ownerName || "국가"}, 임차인 ${desk.studentName || "없음"}, 현재가 ${formatDisplayMoney(getDeskPrice(desk))} ${currencyUnit || ""}, ${status.label}` : desk.studentName || "미배정"} 상세 보기`}
                 className="relative h-full w-full text-left">
                 <ClassroomDeskVisual label={desk.label || `${desk.number}번`}
                   number={desk.number} studentName={desk.studentName} teamId={desk.teamId}
                   ownerName={desk.ownerName} ownerType={desk.ownerType || (desk.ownerId ? 'student' : 'state')} priceText={getDeskPriceText(desk)} status={status}
+                  isOwnerOccupied={Boolean(desk.ownerId && desk.studentId && desk.ownerId === desk.studentId)}
                   view={displayedViewMode} rotation={seat.rotation}
                   selected={isTradeModalOpen && selectedDesk?.id === desk.id} />
               </button>

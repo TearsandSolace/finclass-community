@@ -198,15 +198,15 @@ const ClassroomLayoutEditor = ({ classId, initialData, configData, students, onS
         return { ...group, rows: nextRows, cols: nextCols, desks: nextDesks };
       });
 
-      return renumberGroups(updated);
+      return renumberGroups(updated, placementData);
     });
     setHasChanges(true);
-  }, [seedMarketPrice, seedOfficialPrice]);
+  }, [placementData, seedMarketPrice, seedOfficialPrice]);
 
   const applyDeleteGroup = useCallback((groupId) => {
-    setGroups((prev) => renumberGroups(prev.filter((group) => group.id !== groupId)));
+    setGroups((prev) => renumberGroups(prev.filter((group) => group.id !== groupId), placementData));
     setHasChanges(true);
-  }, []);
+  }, [placementData]);
 
   const applyDeskPatch = useCallback((deskId, patch) => {
     if (!deskId) return;
@@ -437,7 +437,7 @@ const ClassroomLayoutEditor = ({ classId, initialData, configData, students, onS
         desks: generateDesks(groupId, 2, 2),
         position: { x: 0, y: 0 },
       };
-      setGroups(renumberGroups([...groups, newGroup]));
+      setGroups(renumberGroups([...groups, newGroup], placementData));
       setHasChanges(true);
       showFeedback('새 분단을 추가했습니다.', 'info');
     },
@@ -828,7 +828,7 @@ const ClassroomLayoutEditor = ({ classId, initialData, configData, students, onS
     },
 
     handleAutoNumbering: () => {
-      setGroups((prev) => renumberGroups(prev));
+      setGroups((prev) => renumberGroups(prev, placementData));
       setHasChanges(true);
       showFeedback('좌석 번호를 다시 정렬했습니다.', 'success');
     },

@@ -488,13 +488,65 @@ export const normalizeConstraints = (raw) => ({
   genderSeatPreferences: normalizeGenderSeatPreferences(raw?.genderSeatPreferences),
 });
 
-export const renumberGroups = (targetGroups) => {
-  let count = 1;
+// 같은 열(분단)로 볼 x 좌표 차이. 자리 한 칸(SEAT_STEP=3)의 절반이다.
+const SAME_COLUMN_X_TOLERANCE = 1.5;
+
+const hasSavedFreePlacement = (placementData) =>
+  placementData?.version === 2 &&
+  Array.isArray(placementData?.seats) &&
+  placementData.seats.length > 0;
+
+// 저장된 자리 좌표 기준: 왼쪽 열부터, 같은 열 안에서는 앞(교탁 쪽)에서 뒤로 번호를 매긴다.
+const getVisualColumnOrder = (targetGroups, placementData) => {
+  const positionById = new Map(
+    resolveSeatPlacements(targetGroups, placementData).map((seat) => [seat.id, seat]),
+  );
+  const activeSeats = targetGroups
+    .flatMap((group) => group.desks || [])
+    .filter((desk) => desk?.isActive && positionById.has(desk.id))
+    .map((desk) => positionById.get(desk.id))
+    .sort((a, b) => a.x - b.x || a.y - b.y);
+
+  const columns = [];
+  activeSeats.forEach((seat) => {
+    const column = columns[columns.length - 1];
+    if (column && seat.x - column.startX <= SAME_COLUMN_X_TOLERANCE) {
+      column.seats.push(seat);
+    } else {
+      columns.push({ startX: seat.x, seats: [seat] });
+    }
+  });
+
+  return columns.flatMap((column) =>
+    column.seats.sort((a, b) => a.y - b.y || a.x - b.x).map((seat) => seat.id),
+  );
+};
+
+// 좌표가 없는 예전 배치: 묶음 순서대로, 묶음 안에서는 세로(열) 방향으로 번호를 매긴다.
+const getGroupColumnOrder = (targetGroups) =>
+  targetGroups.flatMap((group) => {
+    const desks = group.desks || [];
+    const cols = Math.max(1, Number(group.cols) || 1);
+    return desks
+      .map((desk, index) => ({ desk, row: Math.floor(index / cols), col: index % cols }))
+      .filter(({ desk }) => desk?.isActive)
+      .sort((a, b) => a.col - b.col || a.row - b.row)
+      .map(({ desk }) => desk.id);
+  });
+
+export const renumberGroups = (targetGroups, placementData = null) => {
+  const orderedIds = hasSavedFreePlacement(placementData)
+    ? getVisualColumnOrder(targetGroups, placementData)
+    : getGroupColumnOrder(targetGroups);
+  const numberById = new Map(orderedIds.map((id, index) => [id, index + 1]));
+  let fallbackNumber = orderedIds.length + 1;
   return targetGroups.map((group) => ({
     ...group,
-    desks: group.desks.map((desk) =>
-      desk.isActive ? { ...desk, number: count++ } : desk,
-    ),
+    desks: group.desks.map((desk) => {
+      if (!desk.isActive) return desk;
+      const number = numberById.get(desk.id) ?? fallbackNumber++;
+      return { ...desk, number };
+    }),
   }));
 };
 
