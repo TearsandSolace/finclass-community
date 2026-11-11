@@ -206,7 +206,8 @@ test('rental first payment, duplicate receipt and deposit settlement match legac
     for(const h of pair){const api=h.load('functions/src/realestate.js');const request={auth:{uid:'tenant',token:{classId:'c1',role:'student'}},data:{classId:'c1',deskId:desk.id,clientRequestId:'deposit-start-001'}};
         await api.payRentDeposit(request);await api.payRentDeposit(request);
         await api.settleRentDeposit({auth:{uid:'teacher',token:{role:'teacher',classId:'c1'}},data:{classId:'c1',deskId:desk.id,deductionAmount:0}});
-        assert.equal(h.data.get('classes/c1/students/tenant').assets.cash,930);
+        // 입주는 보증금만 낸다(선납 임대료 없음). 보증금 50은 정산 때 그대로 돌려받는다.
+        assert.equal(h.data.get('classes/c1/students/tenant').assets.cash,1000);
         await assert.rejects(api.settleRentDeposit({auth:{uid:'teacher',token:{role:'teacher',classId:'c1'}},data:{classId:'c1',deskId:desk.id}}));}
     await compareFinance(...pair);
 });

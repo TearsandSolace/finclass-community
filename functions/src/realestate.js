@@ -22,7 +22,6 @@ const {
 } = require("../utils/realEstateIncomeTax");
 const {
     calculateCumulativeRentCharge,
-    calculateInitialPrepaidDays,
     calculateUnusedPrepaidRent,
 } = require("../utils/rentContractPolicy");
 const { getClassFundChannelAccess } = require("../utils/classFundPolicy");
@@ -814,10 +813,17 @@ const buildUpdatedRentContractDesk = async ({
         rentDepositSettlementReason: isSameContractConfig
             ? (targetDesk.rentDepositSettlementReason || null)
             : null,
+        // 보증금이 없으면 낼 것이 없으므로 바로 입주(계약 시작) 상태가 된다.
         rentContractStatus: isSameContractConfig
             ? existingLifecycleStatus
-            : RENT_CONTRACT_STATUS.PENDING_PAYMENT,
-        rentActivatedAt: isSameContractConfig ? (targetDesk.rentActivatedAt || null) : null,
+            : depositAmount > 0
+                ? RENT_CONTRACT_STATUS.PENDING_PAYMENT
+                : RENT_CONTRACT_STATUS.ACTIVE,
+        rentActivatedAt: isSameContractConfig
+            ? (targetDesk.rentActivatedAt || null)
+            : depositAmount > 0
+                ? null
+                : admin.firestore.Timestamp.fromDate(new Date()),
         rentInitialPaymentDays: isSameContractConfig
             ? Math.max(0, toWholeNumber(targetDesk.rentInitialPaymentDays))
             : 0,
@@ -2972,7 +2978,7 @@ exports.payRent = onCall(async (request) => {
         ) {
             throw new HttpsError(
                 "failed-precondition",
-                "임대 관리에서 ‘첫 납부’를 완료해 주세요.",
+                "임대 관리에서 ‘보증금 납부’를 완료해 주세요.",
             );
         }
 
@@ -3352,7 +3358,7 @@ exports.payRentDeposit = onCall(async (request) => {
         if (operationSnap.exists) {
             return operationSnap.data()?.response || {
                 success: true,
-                message: "이미 처리된 첫 납부입니다.",
+                message: "이미 처리된 보증금 납부입니다.",
             };
         }
 
@@ -3393,19 +3399,8 @@ exports.payRentDeposit = onCall(async (request) => {
             throw new HttpsError("already-exists", "이미 시작된 임대 계약입니다.");
         }
 
-        const today = startOfDayInKST(new Date());
-        const elapsedContractDays = today.getTime() < rentContract.contractStartDate.getTime()
-            ? 0
-            : countInclusiveDaysInKST(
-                rentContract.contractStartDate,
-                today.getTime() > rentContract.contractLastDate.getTime()
-                    ? rentContract.contractLastDate
-                    : today,
-            );
-        const initialPaymentDays = calculateInitialPrepaidDays({
-            totalContractDays: rentContract.totalContractDays,
-            elapsedContractDays,
-        });
+        // 입주는 보증금만으로 한다. 임대료는 입주 후 주 단위로 따로 낸다.
+        const initialPaymentDays = 0;
         const unitRent = getDeskWeeklyRentAmount(desk);
         const initialRentAmount = calculateCumulativeRentCharge({
             weeklyRent: unitRent,
@@ -3695,7 +3690,7 @@ exports.payRentDeposit = onCall(async (request) => {
 
         const response = {
             success: true,
-            message: `첫 납부 금액 ${totalPaymentAmount.toLocaleString()}을 납부했습니다.`,
+            message: `보증금 ${totalPaymentAmount.toLocaleString()}을 내고 입주했습니다.`,
             depositAmount: deposit.amount,
             rentAmount: initialRentAmount,
             prepaidDays: initialPaymentDays,

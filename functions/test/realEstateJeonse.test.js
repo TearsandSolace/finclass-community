@@ -64,3 +64,37 @@ test("jeonse requires a deposit and monthly zero rent still clears the contract"
     assert.equal(desk.rentContractId, null);
     assert.equal(desk.rentType, null);
 });
+
+test("monthly contract moves in with the deposit only and rent is paid weekly afterwards", async () => {
+    const h = createCallableHarness(seed(), { retryTransaction: true });
+    const api = h.load("functions/src/realestate.js");
+    const monthly = (deposit) => ({
+        action: "update_rent_fee",
+        payload: { rentType: "monthly", weeklyRent: 70, depositAmount: deposit, rentStartDateKey: kstDateKey(0), rentLastDateKey: kstDateKey(27) },
+    });
+
+    await api.updateRealEstateDeskState(teacher(monthly(300)));
+    assert.equal(getDesk(h).rentContractStatus, "pending_payment");
+    await api.payRentDeposit(tenant({ clientRequestId: "monthly-deposit-1" }));
+    let desk = getDesk(h);
+    assert.equal(desk.rentContractStatus, "active");
+    assert.equal(desk.rentPaidDays, 0, "no rent is prepaid at move-in");
+    assert.equal(h.data.get("classes/c1/students/tenant").assets.cash, 700, "tenant pays only the deposit");
+
+    await api.payRent(tenant({ days: 7, clientRequestId: "monthly-rent-1" }));
+    desk = getDesk(h);
+    assert.equal(desk.rentPaidDays, 7);
+    assert.equal(h.data.get("classes/c1/students/tenant").assets.cash, 630);
+});
+
+test("monthly contract without a deposit starts right away", async () => {
+    const h = createCallableHarness(seed());
+    const api = h.load("functions/src/realestate.js");
+    await api.updateRealEstateDeskState(teacher({
+        action: "update_rent_fee",
+        payload: { rentType: "monthly", weeklyRent: 70, depositAmount: 0, rentStartDateKey: kstDateKey(0), rentLastDateKey: kstDateKey(27) },
+    }));
+    assert.equal(getDesk(h).rentContractStatus, "active");
+    await api.payRent(tenant({ days: 7, clientRequestId: "nodeposit-rent-1" }));
+    assert.equal(getDesk(h).rentPaidDays, 7);
+});

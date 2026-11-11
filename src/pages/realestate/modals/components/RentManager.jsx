@@ -380,8 +380,8 @@ const RentManager = ({
     statusLabel = '임대 계약을 먼저 등록해야 정확한 연체 계산이 가능합니다.';
   } else if (isContractPaymentPending) {
     statusLabel = isOverdue
-      ? `첫 납부 대기 · 연체 ${formatCurrency(overdueAmount)} · ${unpaidDays}일 미납`
-      : '첫 납부가 필요합니다.';
+      ? `보증금 납부 대기 · 연체 ${formatCurrency(overdueAmount)} · ${unpaidDays}일 미납`
+      : '보증금을 내면 입주합니다.';
   } else if (isPendingStart && rentStartDate) {
     statusLabel = `${formatDateLabel(rentStartDate)}부터 계약이 시작됩니다.`;
   } else if (isOverdue) {
@@ -402,7 +402,7 @@ const RentManager = ({
       ? 'bg-amber-100 text-amber-700'
       : 'bg-slate-100 text-slate-700';
   const contractBadgeLabel = isContractPaymentPending
-    ? '첫 납부 대기'
+    ? '보증금 납부 대기'
     : isContractRunning
     ? '진행 중 계약'
     : isPendingStart
@@ -631,22 +631,20 @@ const RentManager = ({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-[13px] font-black text-slate-800">
-                {isContractPaymentPending ? (isJeonse ? '전세 보증금 납부' : '첫 납부') : (isJeonse ? '전세 보증금' : '임대 보증금')}
+                {isContractPaymentPending ? (isJeonse ? '전세 보증금 납부' : '보증금 납부') : (isJeonse ? '전세 보증금' : '임대 보증금')}
               </p>
               {isContractPaymentPending && (
                 <p className="mt-0.5 text-[11px] font-semibold text-slate-600">
                   {isJeonse
                     ? '전세 보증금을 납부하면 계약이 시작됩니다.'
-                    : depositAmount > 0
-                      ? '보증금과 첫 임대료를 함께 납부합니다.'
-                      : '보증금 없이 첫 임대료만 납부합니다.'}
+                    : '보증금을 내면 바로 입주합니다. 임대료는 입주 후 매주 냅니다.'}
                 </p>
               )}
               <p className="mt-0.5 text-base font-black text-slate-900">
                 {formatCurrency(isContractPaymentPending ? initialPaymentTotal : depositAmount)}
               </p>
               <p className="mt-0.5 text-[11px] font-semibold text-slate-600">
-                {isContractPaymentPending && !isJeonse && (
+                {isContractPaymentPending && initialRentAmount > 0 && (
                   `보증금 ${formatCurrency(depositAmount)} + 임대료 ${initialPaymentDays}일치 ${formatCurrency(initialRentAmount)}`
                 )}
                 {depositStatus === 'paid' && '납부 완료 · 계약 종료 후 반환 대상입니다.'}
@@ -663,7 +661,7 @@ const RentManager = ({
                 rounded="lg"
                 
               >
-                {isJeonse ? '보증금 납부' : '첫 납부'}
+                보증금 납부
               </Button>
             )}
           </div>
@@ -832,9 +830,9 @@ const RentManager = ({
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] font-semibold text-amber-700">
               {isReplacingContract
-                ? '기존 보증금과 미사용 선납 임대료를 정산한 뒤 새 계약은 첫 납부 대기가 됩니다.'
+                ? '기존 보증금과 미사용 선납 임대료를 정산한 뒤 새 계약은 보증금 납부 대기가 됩니다.'
                 : isContractPaymentPending
-                ? '첫 납부 전에는 조건을 수정하거나, 월세로 바꿔 임대료 0으로 저장해 계약을 취소할 수 있습니다.'
+                ? '보증금을 내기 전에는 조건을 수정하거나, 월세로 바꿔 임대료 0으로 저장해 계약을 취소할 수 있습니다.'
                 : isJeonseInput
                   ? '전세는 보증금을 내면 계약이 시작되고, 끝나면 보증금을 돌려받습니다.'
                   : '월세 임대료를 0으로 저장하면 계약이 해제됩니다.'}
@@ -947,7 +945,7 @@ const RentManager = ({
             
           >
             {isContractPaymentPending
-              ? '위의 ‘첫 납부’를 먼저 완료해주세요'
+              ? '위의 ‘보증금 납부’를 먼저 완료해주세요'
               : `${formatCurrency(paymentAmount)} · ${paymentLabel} 납부`}
           </Button>
         </div>

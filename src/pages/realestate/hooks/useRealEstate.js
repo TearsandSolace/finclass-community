@@ -362,12 +362,12 @@ export const useRealEstate = (classId, user, showFeedback) => {
         clientRequestId: createRealEstateClientRequestId(),
       });
       if (result?.success) {
-        showFeedback(result.message || '첫 납부를 완료했습니다.', 'success');
+        showFeedback(result.message || '보증금을 내고 입주했습니다.', 'success');
         return true;
       }
       return false;
     } catch (error) {
-      showFeedback(error.message || '첫 납부 중 오류가 발생했습니다.', 'error');
+      showFeedback(error.message || '보증금 납부 중 오류가 발생했습니다.', 'error');
       return false;
     } finally {
       setLoading(false);
@@ -412,7 +412,7 @@ export const useRealEstate = (classId, user, showFeedback) => {
   const replaceRentContract = async (deskId, payload) => {
     const success = await updateDeskStatus(deskId, 'replace_rent_contract', payload);
     if (success) {
-      showFeedback('기존 계약을 정산하고 새 계약을 첫 납부 대기로 등록했습니다.', 'success');
+      showFeedback('기존 계약을 정산하고 새 계약을 보증금 납부 대기로 등록했습니다.', 'success');
     }
     return success;
   };

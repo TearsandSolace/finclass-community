@@ -17,7 +17,7 @@ function setup(overrides={},split=true,extra=[]){
 for(const split of [false,true])test(`fully paid expired contract can be replaced in ${split?'split':'legacy'} storage; retry preserves history and cash`,async()=>{
  const {h,api,request,read}=setup({},split);const old=structuredClone(h.data.get(base+"rent_payments/records/old-payment"));
  await api.updateRealEstateRentContractsBulk(request);const id=read().rentContractId;
- assert.notEqual(id,"old-rent");assert.equal(read().rentPaidAmount,0);assert.equal(read().rentContractStatus,"pending_payment");
+ assert.notEqual(id,"old-rent");assert.equal(read().rentPaidAmount,0);assert.equal(read().rentContractStatus,"active"); // 보증금 0인 새 계약은 바로 입주한다
  await api.updateRealEstateRentContractsBulk(request);assert.equal(read().rentContractId,id);
  assert.deepEqual(h.data.get(base+"rent_payments/records/old-payment"),old);assert.equal(h.data.get("classes/c1/students/tenant").assets.cash,1000);assert.equal(h.data.get("classes/c1/students/owner").assets.cash,2000);
  if(split)assert.equal(h.data.get(base+"contracts/records/old-rent").fields.rentPaidAmount,70);

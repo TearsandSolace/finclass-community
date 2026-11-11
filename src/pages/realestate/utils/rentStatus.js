@@ -302,22 +302,9 @@ function computeDeskRentStatus(desk) {
     depositAmount > 0 && depositStatus !== 'paid' ? 'pending_payment' : 'active'
   );
   const isContractPaymentPending = lifecycleStatus !== 'active';
-  const elapsedContractDays = todayDate && todayDate.getTime() >= rentStartDate.getTime()
-    ? countInclusiveDaysInKST(
-        rentStartDate,
-        todayDate.getTime() > contractLastDate.getTime() ? contractLastDate : todayDate,
-      )
-    : 0;
-  const initialPaymentDays = calculateInitialPrepaidDays({
-    totalContractDays,
-    elapsedContractDays,
-  });
-  const initialRentAmount = calculateCumulativeRentCharge({
-    weeklyRent,
-    paidDays,
-    paidAmount,
-    requestedDays: initialPaymentDays,
-  });
+  // 입주는 보증금만으로 한다. 임대료는 입주 후 주 단위로 따로 낸다.
+  const initialPaymentDays = 0;
+  const initialRentAmount = 0;
 
   // First-payment eligibility is separate from rent accrued since the start date.
   const paymentStatus = {
@@ -374,9 +361,17 @@ function computeDeskRentStatus(desk) {
   const overdueAccrualEnd = yesterdayDate && yesterdayDate.getTime() >= rentStartDate.getTime()
     ? (yesterdayDate.getTime() > contractLastDate.getTime() ? contractLastDate : yesterdayDate)
     : null;
-  const overdueAccruedDays = overdueAccrualEnd
+  const elapsedDaysThroughYesterday = overdueAccrualEnd
     ? countInclusiveDaysInKST(rentStartDate, overdueAccrualEnd)
     : 0;
+  // 임대료는 주 단위로 낸다. 한 주가 다 지나도록 그 주 임대료를 안 냈을 때만 연체로 본다.
+  // 계약이 끝났으면 마지막 주는 며칠이든 모두 낼 금액에 들어간다.
+  const contractEndedBeforeToday = Boolean(
+    todayDate && contractLastDate.getTime() < todayDate.getTime(),
+  );
+  const overdueAccruedDays = contractEndedBeforeToday
+    ? elapsedDaysThroughYesterday
+    : Math.floor(elapsedDaysThroughYesterday / DAYS_PER_WEEK) * DAYS_PER_WEEK;
   const overdueDays = Math.max(0, overdueAccruedDays - paidDays);
   const overdueAmount = Math.max(
     0,
