@@ -581,7 +581,13 @@ const clearDeskRentContract = (desk, nextWeeklyRent = 0) => ({
     rentActivatedAt: null,
     rentInitialPaymentDays: 0,
     rentInitialPaymentAmount: 0,
+    rentType: null,
 });
+
+// 전세: 보증금만 내고 주간 임대료는 없는 계약. 보증금은 임대인이 받아 쓰고 계약이 끝나면 돌려준다.
+const RENT_TYPE_JEONSE = "jeonse";
+const RENT_TYPE_MONTHLY = "monthly";
+const isJeonseRentDesk = (desk = {}) => desk?.rentType === RENT_TYPE_JEONSE;
 
 const buildUpdatedRentContractDesk = async ({
     transaction,
@@ -601,7 +607,10 @@ const buildUpdatedRentContractDesk = async ({
         );
     }
 
-    const weeklyRent = Math.max(0, parseInt(payload.weeklyRent, 10) || 0);
+    const isJeonse = String(payload.rentType || "").trim() === RENT_TYPE_JEONSE;
+    const nextRentType = isJeonse ? RENT_TYPE_JEONSE : RENT_TYPE_MONTHLY;
+    const currentRentType = isJeonseRentDesk(targetDesk) ? RENT_TYPE_JEONSE : RENT_TYPE_MONTHLY;
+    const weeklyRent = isJeonse ? 0 : Math.max(0, parseInt(payload.weeklyRent, 10) || 0);
     const hasDepositAmountPayload = Object.prototype.hasOwnProperty.call(payload, "depositAmount");
     const depositAmount = hasDepositAmountPayload
         ? Math.max(0, parseInt(payload.depositAmount, 10) || 0)
@@ -643,7 +652,11 @@ const buildUpdatedRentContractDesk = async ({
         }
     }
 
-    if (weeklyRent <= 0) {
+    if (isJeonse && depositAmount <= 0) {
+        throw new HttpsError("invalid-argument", "전세 계약은 보증금을 1 이상 입력해 주세요.");
+    }
+
+    if (!isJeonse && weeklyRent <= 0) {
         if (
             targetDesk?.rentContractId &&
             existingLifecycleStatus === RENT_CONTRACT_STATUS.ACTIVE &&
@@ -720,6 +733,7 @@ const buildUpdatedRentContractDesk = async ({
         existingRentStartDate.getTime() === parsedRentStartDate.getTime() &&
         existingRentLastDate.getTime() === parsedRentLastDate.getTime() &&
         currentWeeklyRent === weeklyRent &&
+        currentRentType === nextRentType &&
         existingDeposit.amount === depositAmount,
     );
 
@@ -772,6 +786,7 @@ const buildUpdatedRentContractDesk = async ({
     return {
         ...targetDesk,
         weeklyRent,
+        rentType: nextRentType,
         rentContractId: nextRentContractId,
         rentStartAt: admin.firestore.Timestamp.fromDate(parsedRentStartDate),
         rentLastDateAt: admin.firestore.Timestamp.fromDate(parsedRentLastDate),
@@ -2916,6 +2931,10 @@ exports.payRent = onCall(async (request) => {
             throw new HttpsError("failed-precondition", "자기 소유 자리에는 임대료 납부가 필요하지 않습니다.");
         }
 
+        if (isJeonseRentDesk(desk)) {
+            throw new HttpsError("failed-precondition", "전세 계약은 주간 임대료가 없습니다. 보증금만 내면 됩니다.");
+        }
+
         const unitRent = Number(desk.weeklyRent || desk.rentPrice || 0);
         const rentContract = buildRentContractContext(desk);
         const isContractMode = rentContract.hasConfiguredContract;
@@ -4706,6 +4725,7 @@ exports.updateRealEstateRentContractsBulk = onCall(async (request) => {
         depositAmount,
         rentStartDateKey,
         rentLastDateKey,
+        rentType,
     } = request.data || {};
 
     if (!classId) {
@@ -4782,6 +4802,7 @@ exports.updateRealEstateRentContractsBulk = onCall(async (request) => {
         const updatedDeskLabels = [];
         const bulkPayload = {
             weeklyRent,
+            rentType,
             rentStartDateKey,
             rentLastDateKey,
             ...(depositAmount === undefined ? {} : { depositAmount }),

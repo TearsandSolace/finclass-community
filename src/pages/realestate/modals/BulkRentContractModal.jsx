@@ -93,19 +93,24 @@ const BulkRentContractModal = ({
 
   const selectedCount = targetDesks.length;
   const hasWeeklyRentInput = weeklyRentInput.trim() !== '';
-  const normalizedWeeklyRent = contractAction === 'clear' ? 0 : Math.max(0, Math.floor(Number(weeklyRentInput) || 0));
+  // 'set' = 월세, 'jeonse' = 전세(보증금만), 'clear' = 계약 해제
+  const isJeonseAction = contractAction === 'jeonse';
+  const isSetAction = contractAction === 'set' || isJeonseAction;
+  const normalizedWeeklyRent = contractAction === 'clear' || isJeonseAction ? 0 : Math.max(0, Math.floor(Number(weeklyRentInput) || 0));
   const normalizedDeposit = Math.max(0, Math.floor(Number(depositInput) || 0));
   const allSelected = eligibleDesks.length > 0 && selectedDesks.size === eligibleDesks.length;
   const configuredDeskCount = targetDesks.filter(
     (desk) => desk?.rentContractId && desk?.rentStartAt && desk?.rentLastDateAt,
   ).length;
-  const needsSettlement = contractAction === 'set' && settleExpiredContracts;
+  const needsSettlement = isSetAction && settleExpiredContracts;
   const previewKey = JSON.stringify({ classId, contractAction, settleExpiredContracts, allowSystemCoverage,
     weeklyRentInput, depositInput, startDateInput, lastDateInput, targets: targetDesks });
   currentPreviewKey.current = previewKey;
   const currentPreview = settlementPreview?.key === previewKey ? settlementPreview : null;
   const validConditions = systemEnabled && selectedCount > 0 && (contractAction === 'clear' || (
-    hasWeeklyRentInput && Number.isSafeInteger(Number(weeklyRentInput)) && normalizedWeeklyRent > 0 &&
+    (isJeonseAction
+      ? normalizedDeposit > 0
+      : hasWeeklyRentInput && Number.isSafeInteger(Number(weeklyRentInput)) && normalizedWeeklyRent > 0) &&
     Number.isSafeInteger(Number(depositInput)) && Number(depositInput) >= 0 &&
     startDateInput && lastDateInput && lastDateInput >= startDateInput
   ));
@@ -187,6 +192,7 @@ const BulkRentContractModal = ({
     try {
       const result = await updateRealEstateRentContractsBulkAPI({ classId,
         deskIds: targetDesks.map((desk) => desk.id), weeklyRent: normalizedWeeklyRent, depositAmount: normalizedDeposit,
+        rentType: isJeonseAction ? 'jeonse' : 'monthly',
         rentStartDateKey: startDateInput, rentLastDateKey: lastDateInput,
         settleExpiredContracts: true, allowSystemCoverage, previewOnly: true, clientRequestId,
       });
@@ -207,11 +213,15 @@ const BulkRentContractModal = ({
       return;
     }
 
+    if (isJeonseAction && normalizedDeposit <= 0) {
+      showFeedback('전세는 보증금을 1 이상 입력해 주세요.', 'error');
+      return;
+    }
     if (contractAction === 'set' && (!hasWeeklyRentInput || !Number.isFinite(Number(weeklyRentInput)) || normalizedWeeklyRent <= 0)) {
       showFeedback('주 임대료는 1 이상의 숫자로 입력해 주세요.', 'error');
       return;
     }
-    if (contractAction === 'set' && (!Number.isFinite(Number(depositInput)) || Number(depositInput) < 0)) {
+    if (isSetAction && (!Number.isFinite(Number(depositInput)) || Number(depositInput) < 0)) {
       showFeedback('보증금은 0 이상의 숫자로 입력해 주세요.', 'error');
       return;
     }
@@ -224,7 +234,7 @@ const BulkRentContractModal = ({
     let rentStartDateKey = null;
     let rentLastDateKey = null;
 
-    if (normalizedWeeklyRent > 0) {
+    if (isSetAction) {
       const parsedStartDate = startOfDayInKST(parseDateKeyAsKST(startDateInput));
       const parsedLastDate = startOfDayInKST(parseDateKeyAsKST(lastDateInput));
 
@@ -245,6 +255,8 @@ const BulkRentContractModal = ({
     const confirmed = (await appConfirm(
       needsSettlement
         ? `${currentPreview.expiredCount}개 만료 계약을 정산하고 ${selectedCount}개 자리에 새 계약을 적용할까요?\n\n보증금 반환 ${formatCurrency(currentPreview.totals.depositRefundAmount)}\n선납 임대료 반환 ${formatCurrency(currentPreview.totals.rentRefundAmount)}\n시스템 보전 ${formatCurrency(currentPreview.totals.systemCoveredAmount)}\n\n반환금 지급과 새 계약 설정이 함께 처리됩니다.`
+        : isJeonseAction
+        ? `${selectedCount}개 자리에 전세 보증금 ${formatCurrency(normalizedDeposit)}, ${startDateInput} ~ ${lastDateInput} 계약을 적용할까요?\n\n주간 임대료는 없고, 보증금은 임대인이 받아 쓰다가 계약이 끝나면 돌려줍니다.`
         : normalizedWeeklyRent > 0
         ? `${selectedCount}개 자리에 주 임대료 ${formatCurrency(normalizedWeeklyRent)}, 보증금 ${formatCurrency(normalizedDeposit)}, ${startDateInput} ~ ${lastDateInput} 계약을 적용할까요?\n\n진행 중인 계약이나 미납·미정산 금액이 있으면 적용되지 않습니다.`
         : `${selectedCount}개 자리의 임대 계약을 해제할까요?\n\n기존 납부 기록은 남아 있고, 현재 계약 정보만 비워집니다.`,
@@ -258,6 +270,7 @@ const BulkRentContractModal = ({
         deskIds: targetDesks.map((desk) => desk.id),
         weeklyRent: normalizedWeeklyRent,
         depositAmount: normalizedDeposit,
+        rentType: isJeonseAction ? 'jeonse' : 'monthly',
         rentStartDateKey,
         rentLastDateKey,
         ...(needsSettlement ? { settleExpiredContracts: true, allowSystemCoverage,
@@ -334,7 +347,8 @@ const BulkRentContractModal = ({
           </div>
 
           <div className="flex gap-2">
-            <Button tone="blue" kind={contractAction === 'set' ? 'soft' : 'outline'} aria-pressed={contractAction === 'set'} onClick={() => setContractAction('set')} className="flex-1">계약 설정</Button>
+            <Button tone="blue" kind={contractAction === 'set' ? 'soft' : 'outline'} aria-pressed={contractAction === 'set'} onClick={() => setContractAction('set')} className="flex-1">월세 계약</Button>
+            <Button tone="violet" kind={contractAction === 'jeonse' ? 'soft' : 'outline'} aria-pressed={contractAction === 'jeonse'} onClick={() => setContractAction('jeonse')} className="flex-1">전세 계약</Button>
             <Button tone="rose" kind={contractAction === 'clear' ? 'soft' : 'outline'} aria-pressed={contractAction === 'clear'} onClick={() => setContractAction('clear')} className="flex-1">계약 해제</Button>
           </div>
           <div className="grid gap-3 grid-cols-2">
@@ -343,17 +357,17 @@ const BulkRentContractModal = ({
               <input
                 type="number"
                 min="1"
-                disabled={contractAction === 'clear'}
+                disabled={contractAction === 'clear' || isJeonseAction}
                 step="1"
-                value={weeklyRentInput}
+                value={isJeonseAction ? '' : weeklyRentInput}
                 onChange={(event) => setWeeklyRentInput(event.target.value)}
-                placeholder="예: 10"
+                placeholder={isJeonseAction ? '전세는 임대료 없음' : '예: 10'}
                 className="w-full rounded-xl border border-blue-200 bg-blue-50/50 px-3 py-3 text-base font-bold text-slate-800 outline-none transition focus:ring-2 focus:ring-blue-500"
               />
             </label>
 
             <label className="space-y-2">
-              <span className="text-sm font-bold text-slate-700">보증금</span>
+              <span className="text-sm font-bold text-slate-700">{isJeonseAction ? '전세 보증금 (필수)' : '보증금'}</span>
               <input
                 type="number"
                 min="0"
@@ -399,7 +413,7 @@ const BulkRentContractModal = ({
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
             {contractAction === 'clear' ? '선택한 자리의 현재 계약 정보를 해제합니다. 기존 납부 기록은 유지됩니다.' : '보증금은 저장할 때 차감되지 않습니다. 임차인이 계약 적용 후 별도로 납부합니다.'}
           </div>
-          {contractAction === 'set' && (isTeacher || isAdmin) && (
+          {isSetAction && (isTeacher || isAdmin) && (
             <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50/50 p-3 text-sm leading-6 text-slate-700">
               <label className="flex items-start gap-2 font-bold">
                 <input type="checkbox" className="mt-1 h-4 w-4 accent-blue-600" checked={settleExpiredContracts}
@@ -508,7 +522,12 @@ const BulkRentContractModal = ({
               </p>
               <p>
                 계약 내용:{' '}
-                {contractAction === 'clear' ? '선택한 자리의 현재 임대 계약 해제' : !hasWeeklyRentInput ? '임대료와 계약 기간을 입력해 주세요.' : (
+                {contractAction === 'clear' ? '선택한 자리의 현재 임대 계약 해제' : isJeonseAction ? (
+                    <>
+                      전세 · 보증금 <span className="font-black">{formatCurrency(normalizedDeposit)}</span>
+                      {startDateInput && lastDateInput ? <>, 기간 <span className="font-black">{startDateInput}</span> ~ <span className="font-black">{lastDateInput}</span></> : ' · 계약 기간을 입력해 주세요.'}
+                    </>
+                  ) : !hasWeeklyRentInput ? '임대료와 계약 기간을 입력해 주세요.' : (
                     <>
                       주 임대료 <span className="font-black">{formatCurrency(normalizedWeeklyRent)}</span>
                       , 보증금 <span className="font-bold">{formatCurrency(normalizedDeposit)}</span>

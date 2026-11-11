@@ -83,9 +83,12 @@ const RentManager = ({
     initialPaymentDays,
     initialRentAmount,
     initialPaymentTotal,
+    isJeonse,
   } = rentStatus;
 
   const [rentInput, setRentInput] = useState(weeklyRent > 0 ? String(weeklyRent) : '');
+  const [contractTypeInput, setContractTypeInput] = useState(isJeonse ? 'jeonse' : 'monthly');
+  const isJeonseInput = contractTypeInput === 'jeonse';
   const [depositInput, setDepositInput] = useState(String(Number(desk?.rentDepositAmount || 0)));
   const [deductionInput, setDeductionInput] = useState('0');
   const [settlementReason, setSettlementReason] = useState('');
@@ -101,6 +104,7 @@ const RentManager = ({
   useEffect(() => {
     // Use stable primitive keys here so user-selected payment days do not reset on every render.
     setRentInput(weeklyRent > 0 ? String(weeklyRent) : '');
+    setContractTypeInput(isJeonse ? 'jeonse' : 'monthly');
     setDepositInput(String(Number(desk?.rentDepositAmount || 0)));
     setStartDateInput(rentStartDateKey);
     setLastDateInput(contractLastDateKey);
@@ -120,6 +124,7 @@ const RentManager = ({
     desk?.id,
     desk?.rentDepositAmount,
     hasActiveContract,
+    isJeonse,
     remainingContractDays,
     rentStartDateKey,
     unpaidDays,
@@ -174,6 +179,10 @@ const RentManager = ({
     : `${normalizedPaymentDays}일`;
   const requiresWeeklyOnly = !hasActiveContract;
   const isContractRunning = hasActiveContract && !isContractPaymentPending && !isPendingStart && !isContractEnded;
+  const todayKeyDate = startOfDayInKST(new Date());
+  const jeonseDaysLeft = isJeonse && contractLastDate && todayKeyDate
+    ? Math.max(0, Math.round((contractLastDate.getTime() - todayKeyDate.getTime()) / 86400000) + 1)
+    : 0;
   const tenantPaymentBlockedByEndedContract =
     hasActiveContract && isContractEnded && (remainingContractDays || 0) <= 0;
 
@@ -186,12 +195,12 @@ const RentManager = ({
   const handleApplyRent = async () => {
     if (!ensureSystemEnabled()) return;
 
-    if (!String(rentInput).trim()) {
+    if (!isJeonseInput && !String(rentInput).trim()) {
       showFeedback('주 임대료를 입력해주세요. 계약을 해제하려면 0을 직접 입력해주세요.', 'error');
       return;
     }
 
-    const numericRent = Number(rentInput);
+    const numericRent = isJeonseInput ? 0 : Number(rentInput);
     const numericDeposit = Number(depositInput);
     if (!Number.isFinite(numericRent) || numericRent < 0) {
       showFeedback('임대료는 0 이상으로 입력해주세요.', 'error');
@@ -202,17 +211,23 @@ const RentManager = ({
       return;
     }
 
+    if (isJeonseInput && numericDeposit <= 0) {
+      showFeedback('전세는 보증금을 1 이상 입력해주세요.', 'error');
+      return;
+    }
+    const isContractInput = isJeonseInput || numericRent > 0;
+
     if (rentLimitEnabled && numericRent > maxRent) {
       showFeedback(`임대료 상한은 ${formatCurrency(maxRent)}입니다.`, 'error');
       return;
     }
 
-    if (numericRent === 0 && hasRentConfigured && !(await appConfirm(
+    if (!isContractInput && hasRentConfigured && !(await appConfirm(
       '임대료를 0으로 저장하면 기존 계약이 해제됩니다. 계약을 해제할까요?',
       { title: '계약 해제 확인', confirmLabel: '계약 해제', cancelLabel: '계속 수정하기', tone: 'rose' },
     ))) return;
 
-    if (numericRent > 0 && !desk?.studentId) {
+    if (isContractInput && !desk?.studentId) {
       showFeedback('현재 입주자가 있는 자리에서만 임대 계약을 등록할 수 있습니다.', 'error');
       return;
     }
@@ -220,7 +235,7 @@ const RentManager = ({
     let rentStartDateKey = null;
     let rentLastDateKey = null;
 
-    if (numericRent > 0) {
+    if (isContractInput) {
       const parsedStartDate = startOfDayInKST(parseDateKeyAsKST(startDateInput));
       const parsedLastDate = startOfDayInKST(parseDateKeyAsKST(lastDateInput));
 
@@ -240,6 +255,7 @@ const RentManager = ({
 
     const contractPayload = {
       weeklyRent: numericRent,
+      rentType: isJeonseInput ? 'jeonse' : 'monthly',
       rentStartDateKey,
       rentLastDateKey,
       depositAmount: numericDeposit,
@@ -411,6 +427,9 @@ const RentManager = ({
                     <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${contractBadgeClasses}`}>
                       {contractBadgeLabel}
                     </span>
+                    <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${isJeonse ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'}`}>
+                      {isJeonse ? '전세' : '월세'}
+                    </span>
                     {isOverdue && (
                       <span className="inline-flex rounded-full bg-rose-100 px-3 py-1 text-[11px] font-black text-rose-700">
                         연체 {formatCurrency(overdueAmount)}
@@ -428,8 +447,8 @@ const RentManager = ({
                       <p>{formatDateLabel(rentStartDate)} ~ {formatDateLabel(contractLastDate)}</p>
                     </div>
                     <div>
-                      <p className="mb-1 text-[10px] font-bold uppercase text-slate-400">주 임대료</p>
-                      <p>{formatCurrency(weeklyRent)}</p>
+                      <p className="mb-1 text-[10px] font-bold uppercase text-slate-400">{isJeonse ? '전세 보증금' : '주 임대료'}</p>
+                      <p>{formatCurrency(isJeonse ? depositAmount : weeklyRent)}</p>
                     </div>
                   </div>
                 </div>
@@ -452,6 +471,7 @@ const RentManager = ({
                         <Button
                           onClick={() => {
                             setRentInput(weeklyRent > 0 ? String(weeklyRent) : '');
+                            setContractTypeInput(isJeonse ? 'jeonse' : 'monthly');
                             setStartDateInput(rentStartDate ? formatDateKeyInKST(rentStartDate) : '');
                             setLastDateInput(contractLastDate ? formatDateKeyInKST(contractLastDate) : '');
                             setIsEditingContract(false);
@@ -508,6 +528,20 @@ const RentManager = ({
               </div>
             </div>
 
+            {isJeonse ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-slate-100 bg-white p-3">
+                  <p className="mb-1 text-[10px] font-bold uppercase text-slate-400">주간 임대료</p>
+                  <p className="text-base font-black text-slate-800">없음</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">전세는 보증금만 냅니다</p>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-white p-3">
+                  <p className="mb-1 text-[10px] font-bold uppercase text-slate-400">남은 계약 기간</p>
+                  <p className="text-base font-black text-slate-800">{jeonseDaysLeft}일</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">끝나면 보증금 반환</p>
+                </div>
+              </div>
+            ) : (
             <div className="grid grid-cols-3 gap-2">
               <div className="rounded-xl border border-slate-100 bg-white p-3">
                 <p className="mb-1 text-[10px] font-bold uppercase text-slate-400">누적 발생액</p>
@@ -539,6 +573,7 @@ const RentManager = ({
                 </p>
               </div>
             </div>
+            )}
           </>
         ) : (
           <>
@@ -553,9 +588,9 @@ const RentManager = ({
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-right">
-                    <p className="text-[10px] font-bold uppercase text-slate-400">주 임대료</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">{isJeonse ? '계약 종류' : '주 임대료'}</p>
                     <p className="text-sm font-black text-slate-800">
-                      {hasRentConfigured ? formatCurrency(weeklyRent) : '미설정'}
+                      {isJeonse ? `전세 · 보증금 ${formatCurrency(depositAmount)}` : hasRentConfigured ? formatCurrency(weeklyRent) : '미설정'}
                     </p>
                   </div>
                   <Button
@@ -596,20 +631,22 @@ const RentManager = ({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-[13px] font-black text-slate-800">
-                {isContractPaymentPending ? '첫 납부' : '임대 보증금'}
+                {isContractPaymentPending ? (isJeonse ? '전세 보증금 납부' : '첫 납부') : (isJeonse ? '전세 보증금' : '임대 보증금')}
               </p>
               {isContractPaymentPending && (
                 <p className="mt-0.5 text-[11px] font-semibold text-slate-600">
-                  {depositAmount > 0
-                    ? '보증금과 첫 임대료를 함께 납부합니다.'
-                    : '보증금 없이 첫 임대료만 납부합니다.'}
+                  {isJeonse
+                    ? '전세 보증금을 납부하면 계약이 시작됩니다.'
+                    : depositAmount > 0
+                      ? '보증금과 첫 임대료를 함께 납부합니다.'
+                      : '보증금 없이 첫 임대료만 납부합니다.'}
                 </p>
               )}
               <p className="mt-0.5 text-base font-black text-slate-900">
                 {formatCurrency(isContractPaymentPending ? initialPaymentTotal : depositAmount)}
               </p>
               <p className="mt-0.5 text-[11px] font-semibold text-slate-600">
-                {isContractPaymentPending && (
+                {isContractPaymentPending && !isJeonse && (
                   `보증금 ${formatCurrency(depositAmount)} + 임대료 ${initialPaymentDays}일치 ${formatCurrency(initialRentAmount)}`
                 )}
                 {depositStatus === 'paid' && '납부 완료 · 계약 종료 후 반환 대상입니다.'}
@@ -626,7 +663,7 @@ const RentManager = ({
                 rounded="lg"
                 
               >
-                첫 납부
+                {isJeonse ? '보증금 납부' : '첫 납부'}
               </Button>
             )}
           </div>
@@ -708,7 +745,32 @@ const RentManager = ({
             </span>
           </div>
 
+          <div className="flex gap-2" role="radiogroup" aria-label="계약 종류">
+            {[
+              { id: 'monthly', label: '월세', hint: '매주 임대료 + 보증금(선택)' },
+              { id: 'jeonse', label: '전세', hint: '보증금만 · 임대료 없음' },
+            ].map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                role="radio"
+                aria-checked={contractTypeInput === option.id}
+                onClick={() => setContractTypeInput(option.id)}
+                className={`flex-1 rounded-xl border px-3 py-2 text-left transition ${contractTypeInput === option.id ? 'border-amber-500 bg-white shadow-sm' : 'border-amber-200 bg-amber-50/60 hover:bg-white/70'}`}
+              >
+                <span className="block text-sm font-black text-amber-900">{option.label}</span>
+                <span className="block text-[11px] font-semibold text-amber-700">{option.hint}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-2">
+            {isJeonseInput ? (
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold text-amber-800">주 임대료</span>
+              <p className="rounded-xl border border-amber-200 bg-white/70 px-3 py-2.5 text-sm font-bold text-slate-500">전세는 임대료 없음</p>
+            </div>
+            ) : (
             <label className="space-y-1">
               <span className="text-[11px] font-bold text-amber-800">주 임대료</span>
               <input
@@ -720,14 +782,15 @@ const RentManager = ({
                 className="w-full rounded-xl border border-amber-200 bg-blue-50/50 px-3 py-2.5 text-sm font-bold outline-none focus:border-amber-400"
               />
             </label>
+            )}
             <label className="space-y-1">
-              <span className="text-[11px] font-bold text-amber-800">보증금</span>
+              <span className="text-[11px] font-bold text-amber-800">{isJeonseInput ? '전세 보증금 (필수)' : '보증금'}</span>
               <input
                 type="number"
                 min="0"
                 value={depositInput}
                 onChange={(event) => setDepositInput(event.target.value)}
-                placeholder="없으면 0"
+                placeholder={isJeonseInput ? '전세 보증금 입력' : '없으면 0'}
                 className="w-full rounded-xl border border-amber-200 bg-blue-50/50 px-3 py-2.5 text-sm font-bold outline-none focus:border-amber-400"
               />
             </label>
@@ -758,7 +821,7 @@ const RentManager = ({
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg border border-amber-200 bg-white/80 px-3 py-2 text-[11px] font-semibold text-amber-800">
-            <p>보증금은 임차인이 별도 납부 · {ownerId ? '종료 후 임대인/교사 정산' : '만료 다음 날 자동 정산'}</p>
+            <p>보증금은 임차인이 납부해 {ownerId ? '임대인이 받아 쓰고, 종료 후 임대인/교사가 돌려줌' : '국가가 보관, 만료 다음 날 자동 반환'}</p>
             <p>
               {rentLimitEnabled
                 ? `임대료 상한 ${formatCurrency(maxRent)} · 공시가 ${safeOfficialPriceRatio}% · 상한율 ${safeRentLimitRate}%`
@@ -771,8 +834,10 @@ const RentManager = ({
               {isReplacingContract
                 ? '기존 보증금과 미사용 선납 임대료를 정산한 뒤 새 계약은 첫 납부 대기가 됩니다.'
                 : isContractPaymentPending
-                ? '첫 납부 전에는 조건을 수정하거나 임대료 0으로 계약을 취소할 수 있습니다.'
-                : '임대료를 0으로 저장하면 계약이 해제됩니다.'}
+                ? '첫 납부 전에는 조건을 수정하거나, 월세로 바꿔 임대료 0으로 저장해 계약을 취소할 수 있습니다.'
+                : isJeonseInput
+                  ? '전세는 보증금을 내면 계약이 시작되고, 끝나면 보증금을 돌려받습니다.'
+                  : '월세 임대료를 0으로 저장하면 계약이 해제됩니다.'}
             </p>
             <Button
               onClick={handleApplyRent}
@@ -795,7 +860,7 @@ const RentManager = ({
         </div>
       )}
 
-      {isTenant && hasRentConfigured && !isContractPaymentPending && !isPendingStart && !tenantPaymentBlockedByEndedContract && (
+      {isTenant && hasRentConfigured && !isJeonse && !isContractPaymentPending && !isPendingStart && !tenantPaymentBlockedByEndedContract && (
         <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>

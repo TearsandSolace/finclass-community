@@ -78,7 +78,7 @@ const RentManagementOverview = ({ groups = [], placementData, formatCurrency, on
             <td className="p-3"><input type="checkbox" aria-label={`${label(row.desk)} 선택`} checked={selectedIds.has(row.desk.id)} onChange={() => toggle(row.desk.id)} /></td>
             <td className="p-3"><button type="button" onClick={() => setFocusedId(row.desk.id)} className="text-left font-bold text-blue-700">{label(row.desk)}</button><div>{row.hasContract ? row.tenantName : row.desk.studentName || '미배정'}</div>{row.mismatch && <div className="text-xs text-amber-800">현재 착석: {row.desk.studentName || '없음'}</div>}</td>
             <td className="p-3"><span className={row.overdue ? 'font-bold text-red-700' : 'font-bold'}>{row.status.label}</span><div className="whitespace-nowrap text-xs text-slate-600">{row.period}</div></td>
-            <td className="p-3 whitespace-nowrap">{formatCurrency(row.weeklyRent)}</td>
+            <td className="p-3 whitespace-nowrap">{row.isJeonse ? '전세' : formatCurrency(row.weeklyRent)}</td>
             <td className="p-3 whitespace-nowrap"><span className={row.overdue ? 'font-bold text-red-700' : ''}>{formatCurrency(row.unpaidRentAmount)}</span>{row.overdue && <div className="text-xs text-red-700">{row.rent.overdueDays || 0}일 연체</div>}</td>
             <td className="p-3 whitespace-nowrap">{formatCurrency(row.depositPaid)} / {formatCurrency(row.expired || row.closed || row.returnPending ? row.depositOutstanding : 0)}</td>
           </tr>)}</tbody>
@@ -90,7 +90,7 @@ const RentManagementOverview = ({ groups = [], placementData, formatCurrency, on
         {[
           ['임차인', focused.hasContract ? focused.tenantName : '계약 없음'],
           ['앉은 학생', focused.desk.studentName || '미배정'], ['소유자', focused.desk.ownerName || '국가'],
-          ['계약 기간', focused.period], ['주 임대료', formatCurrency(focused.weeklyRent)],
+          ['계약 기간', focused.period], ['주 임대료', focused.isJeonse ? '전세 (임대료 없음)' : formatCurrency(focused.weeklyRent)],
           ['남은 기간', focused.daysRemaining == null ? '기간 확인 필요' : focused.expired ? '만료' : `${focused.daysRemaining}일`],
           ['미납 임대료', `${formatCurrency(focused.unpaidRentAmount)}${focused.overdue ? ` · ${focused.rent.overdueDays || 0}일 연체` : ''}`],
           ['보증금 납부', formatCurrency(focused.depositPaid)], ['보증금 미납', formatCurrency(focused.depositUnpaid)],

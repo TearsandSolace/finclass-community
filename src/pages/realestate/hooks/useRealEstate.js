@@ -316,17 +316,21 @@ export const useRealEstate = (classId, user, showFeedback) => {
   };
 
   const updateRentFee = async (deskId, newRent, options = {}) => {
-    const weeklyRent = Math.max(0, parseInt(newRent, 10) || 0);
+    const isJeonse = options.rentType === 'jeonse';
+    const weeklyRent = isJeonse ? 0 : Math.max(0, parseInt(newRent, 10) || 0);
     const success = await updateDeskStatus(deskId, 'update_rent_fee', {
       weeklyRent,
+      rentType: isJeonse ? 'jeonse' : 'monthly',
       depositAmount: Math.max(0, parseInt(options.depositAmount, 10) || 0),
       rentStartDateKey: options.rentStartDateKey || null,
       rentLastDateKey: options.rentLastDateKey || null,
     });
 
     if (success) {
-      if (weeklyRent > 0) {
-        showFeedback(`임대 계약을 ${formatCurrency(weeklyRent)} 기준으로 저장했습니다.`, 'success');
+      if (isJeonse) {
+        showFeedback(`전세 계약을 보증금 ${formatCurrency(options.depositAmount)} 기준으로 저장했습니다.`, 'success');
+      } else if (weeklyRent > 0) {
+        showFeedback(`월세 계약을 주 ${formatCurrency(weeklyRent)} 기준으로 저장했습니다.`, 'success');
       } else {
         showFeedback('임대 계약을 해제했습니다.', 'info');
       }
@@ -341,10 +345,12 @@ export const useRealEstate = (classId, user, showFeedback) => {
     rentAmount = 0,
     prepaidDays = 0,
   }) => {
-    const message = [
-      `첫 납부 금액 ${formatCurrency(amount)}을 납부할까요?`,
-      `보증금 ${formatCurrency(depositAmount)} + 임대료 ${prepaidDays}일치 ${formatCurrency(rentAmount)}`,
-    ].join('\n');
+    const message = rentAmount > 0
+      ? [
+        `첫 납부 금액 ${formatCurrency(amount)}을 납부할까요?`,
+        `보증금 ${formatCurrency(depositAmount)} + 임대료 ${prepaidDays}일치 ${formatCurrency(rentAmount)}`,
+      ].join('\n')
+      : `보증금 ${formatCurrency(depositAmount)}을 납부할까요?\n계약이 끝나면 임대인에게서 돌려받습니다.`;
     if (!(await appConfirm(message))) return false;
 
     setLoading(true);

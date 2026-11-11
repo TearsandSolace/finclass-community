@@ -223,10 +223,31 @@ export const isDeskRentApplicable = (desk) =>
   desk?.ownerType !== 'classFund' &&
   desk?.ownerId !== desk?.studentId;
 
+// 전세: 보증금만 내고 주간 임대료가 없는 계약.
+export const isJeonseRentDesk = (desk) => desk?.rentType === "jeonse";
+
 export const getDeskRentStatus = (desk) => {
+  const status = computeDeskRentStatus(desk);
+  if (!isJeonseRentDesk(desk)) return { ...status, isJeonse: false };
+  // 전세는 매주 낼 임대료가 없으므로 연체·미납이 생기지 않는다.
+  return {
+    ...status,
+    isJeonse: true,
+    accruedAmount: 0,
+    amountDue: 0,
+    overdueAmount: 0,
+    isOverdue: false,
+    overdueDays: null,
+    unpaidDays: 0,
+  };
+};
+
+function computeDeskRentStatus(desk) {
   const weeklyRent = getWeeklyRentAmount(desk);
   const isRentApplicable = isDeskRentApplicable(desk);
-  const hasRentConfigured = weeklyRent > 0;
+  const hasRentConfigured =
+    weeklyRent > 0 ||
+    (isJeonseRentDesk(desk) && Number(desk?.rentDepositAmount || 0) > 0);
   const rentStartDate = startOfDayInKST(toDate(desk?.rentStartAt));
   const contractLastDate = startOfDayInKST(toDate(desk?.rentLastDateAt));
   const currentTenantId = String(desk?.studentId || "").trim();

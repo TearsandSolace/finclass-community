@@ -2881,6 +2881,20 @@ function isRentDueForDesk(desk, todayStart) {
     if (desk?.isActive === false) return false;
     if (desk.ownerId && desk.ownerId === desk.studentId) return false;
 
+    // 전세는 주간 임대료가 없으므로, 계약이 시작됐는데 보증금을 아직 안 냈을 때만 알린다.
+    if (desk.rentType === "jeonse") {
+        const jeonseStart = startOfDayInKST(toDateSafe(desk?.rentStartAt));
+        const tenantMatches =
+            String(desk?.rentTenantId || "").trim() === String(desk?.studentId || "").trim();
+        return Boolean(
+            jeonseStart &&
+            tenantMatches &&
+            jeonseStart.getTime() <= todayStart.getTime() &&
+            Number(desk?.rentDepositAmount || 0) > 0 &&
+            desk?.rentContractStatus !== "active",
+        );
+    }
+
     // User request: do not alert when rent is not configured.
     const weeklyRent = getDeskWeeklyRent(desk);
     if (weeklyRent <= 0) return false;

@@ -105,6 +105,7 @@ const MyRealEstateTab = ({ layoutData, userData }) => {
         tenantName: desk?.studentId ? desk?.studentName || '이름 없음' : '공실',
         marketPrice: Number(desk?.lastPurchasePrice || desk?.price || 0),
         weeklyRent: getWeeklyRent(desk),
+        isJeonse: desk?.rentType === 'jeonse',
       }));
   }, [layoutData?.groups, currentUserUid]);
 
@@ -284,7 +285,7 @@ const MyRealEstateTab = ({ layoutData, userData }) => {
               </p>
               <p className="text-[11px] font-semibold text-slate-500 mt-1">
                 입주자 {selectedDesk?.tenantName} | 시세 {formatDisplayMoney(selectedDesk?.marketPrice)} {unit}
-                {' '}| 주 임대료 {formatDisplayMoney(selectedDesk?.weeklyRent)} {unit}
+                {' '}| {selectedDesk?.isJeonse ? '전세' : `주 임대료 ${formatDisplayMoney(selectedDesk?.weeklyRent)} ${unit}`}
               </p>
             </div>
 
