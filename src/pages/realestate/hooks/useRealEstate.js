@@ -321,6 +321,7 @@ export const useRealEstate = (classId, user, showFeedback) => {
     const success = await updateDeskStatus(deskId, 'update_rent_fee', {
       weeklyRent,
       rentType: isJeonse ? 'jeonse' : 'monthly',
+      rentOpenEnded: options.rentOpenEnded === true,
       depositAmount: Math.max(0, parseInt(options.depositAmount, 10) || 0),
       rentStartDateKey: options.rentStartDateKey || null,
       rentLastDateKey: options.rentLastDateKey || null,

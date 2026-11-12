@@ -65,7 +65,8 @@ const mergeAssignments = (currentGroups, proposedGroups) => {
                     Number(desk.rentDepositDeductedAmount || 0) > 0)) {
                 throw new Error("소유권·계약·미정산 보증금이 있는 자리는 숨길 수 없습니다.");
             }
-            if (desk.studentId !== next.studentId &&
+            // 자리 변경 정산이 끝나 반환 대기만 남은 자리(closed)는 새 학생을 앉힐 수 있다.
+            if (desk.studentId !== next.studentId && desk.rentContractStatus !== "closed" &&
                 (desk.rentContractId || desk.rentTenantId ||
                     Number(desk.rentDepositPaidAmount || 0) -
                     Number(desk.rentDepositReturnedAmount || 0) -

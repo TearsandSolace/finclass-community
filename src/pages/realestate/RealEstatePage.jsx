@@ -324,7 +324,7 @@ export default function RealEstatePage() {
         id: window.crypto?.randomUUID?.() || `${Date.now()}-${Math.floor(Math.random() * 100000000)}`,
         signature,
       };
-      await saveRealEstateAssignments({
+      const result = await saveRealEstateAssignments({
         classId,
         groups: newData.groups,
         constraints: newData.constraints,
@@ -332,7 +332,14 @@ export default function RealEstatePage() {
         requestId: assignmentRequestRef.current.id,
       });
       assignmentRequestRef.current = null;
-      showFeedback('좌석 배정을 저장했습니다.', 'success');
+      const settlements = Array.isArray(result?.rentSettlements) ? result.rentSettlements : [];
+      const pendingCount = settlements.filter((item) => item.pendingAmount > 0).length;
+      showFeedback(
+        settlements.length > 0
+          ? `좌석 배정을 저장하고 임대 계약 ${settlements.length}건을 정산했습니다.${pendingCount > 0 ? ` 반환 대기 ${pendingCount}건은 임대 관리에서 확인해 주세요.` : ''}`
+          : '좌석 배정을 저장했습니다.',
+        pendingCount > 0 ? 'warning' : 'success',
+      );
       return true;
     } catch (error) {
       console.error('[RealEstatePage] save failed:', error);

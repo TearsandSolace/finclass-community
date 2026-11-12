@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { appConfirm } from '../../../utils/appDialogs';
 import * as XLSX from 'xlsx';
 import { useFeedback } from '../../../contexts/FeedbackContext';
 import {
@@ -978,26 +979,46 @@ const ClassroomLayoutEditor = ({ classId, initialData, configData, students, onS
         .flatMap((group) => group?.desks || [])
         .map((desk) => [desk?.permanentId || desk?.id, desk]),
     );
-    const unsettledDepositDesk = (initialData?.groups || [])
-      .flatMap((group) => group?.desks || [])
-      .find((originalDesk) => {
-        const paid = Math.max(0, Number(originalDesk?.rentDepositPaidAmount || 0));
-        const returned = Math.max(0, Number(originalDesk?.rentDepositReturnedAmount || 0));
-        const deducted = Math.max(0, Number(originalDesk?.rentDepositDeductedAmount || 0));
-        if (paid - returned - deducted <= 0) return false;
-        const nextDesk = nextDesksByKey.get(originalDesk?.permanentId || originalDesk?.id);
-        return (
-          !nextDesk ||
-          nextDesk.studentId !== originalDesk.studentId ||
-          nextDesk.rentContractId !== originalDesk.rentContractId
-        );
-      });
+    const originalDesks = (initialData?.groups || []).flatMap((group) => group?.desks || []);
+    // 책상을 아예 없애는 경우에만 보증금 정산을 먼저 요구한다.
+    // 학생만 바뀌는 자리는 저장할 때 서버가 임대 계약을 자동 정산한다.
+    const unsettledDepositDesk = originalDesks.find((originalDesk) => {
+      const paid = Math.max(0, Number(originalDesk?.rentDepositPaidAmount || 0));
+      const returned = Math.max(0, Number(originalDesk?.rentDepositReturnedAmount || 0));
+      const deducted = Math.max(0, Number(originalDesk?.rentDepositDeductedAmount || 0));
+      if (paid - returned - deducted <= 0) return false;
+      return !nextDesksByKey.get(originalDesk?.permanentId || originalDesk?.id);
+    });
+    const settlingDesks = originalDesks.filter((originalDesk) => {
+      if (!originalDesk?.rentContractId || !originalDesk?.rentTenantId) return false;
+      if (originalDesk.rentContractStatus === 'closed') return false;
+      const nextDesk = nextDesksByKey.get(originalDesk?.permanentId || originalDesk?.id);
+      return Boolean(nextDesk) && (nextDesk.studentId || null) !== (originalDesk.studentId || null);
+    });
     if (unsettledDepositDesk) {
       showFeedback(
         `${unsettledDepositDesk.label || `${unsettledDepositDesk.number ?? '-'}번 자리`}에 반환할 보증금이 남아 있습니다. 보증금을 먼저 정산한 뒤 자리 배치를 변경해 주세요.`,
         'error',
       );
       return false;
+    }
+    if (settlingDesks.length > 0) {
+      const labels = settlingDesks
+        .slice(0, 5)
+        .map((desk) => desk.label || `${desk.number ?? '-'}번`)
+        .join(', ');
+      const confirmed = await appConfirm(
+        [
+          `학생이 바뀌는 ${settlingDesks.length}개 자리(${labels}${settlingDesks.length > 5 ? ' 외' : ''})의 임대 계약을 자동으로 정산합니다.`,
+          '',
+          '· 남은 보증금은 임대인이 임차인에게 돌려줍니다.',
+          '· 임대료를 4주치 이상 낸 학생의 자투리 미납은 소멸합니다.',
+          '· 4주치 미만으로 낸 학생의 미납은 보증금에서 뺍니다.',
+          '· 임대인 돈이 모자라면 그만큼 반환 대기로 남습니다.',
+        ].join('\n'),
+        { title: '자리 변경 정산', confirmLabel: '정산하고 저장' },
+      );
+      if (!confirmed) return false;
     }
 
     const normalizedForSave = normalizeConstraints(constraints);

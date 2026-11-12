@@ -7,6 +7,12 @@ const { canManagePlacement, validatePlacement, withSeatNumbers, overlaps, canHid
 const { mergeAssignments, buildGrouping, validateConstraints } = require("../utils/realEstateAssignment");
 
 const db = admin.firestore();
+const { FieldValue, Timestamp } = admin.firestore;
+const { stageSeatChangeRentSettlements } = require("../utils/seatChangeRentSettlement");
+const { stageActivityLog } = require("../utils/logUtils");
+const { stageTaxExpense } = require("../utils/taxExpense");
+const { getGlobalConfig } = require("../utils/planManager");
+const { startOfDayInKST, toDate } = require("../utils/dateUtils");
 const { readRealEstateLayout, stageRealEstateLayout, runRealEstateTransaction } = require("../utils/realEstateStorage");
 const requestHash = (value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
@@ -80,8 +86,13 @@ exports.saveRealEstateAssignments = onCall({ region: "asia-northeast3" }, async 
     const payloadHash = requestHash({ groups, constraints });
     const layoutRef = db.doc(`classes/${classId}/real_estate/layout`);
     const groupingRef = db.doc(`classes/${classId}/real_estate/grouping`);
+    const classRef = db.doc(`classes/${classId}`);
+    const globalConfig = await getGlobalConfig();
     return runRealEstateTransaction(db, async (transaction) => {
-        const snap = await readRealEstateLayout(db, layoutRef, transaction);
+        const [snap, classSnap] = await Promise.all([
+            readRealEstateLayout(db, layoutRef, transaction),
+            transaction.get(classRef),
+        ]);
         if (!snap.exists) throw new HttpsError("not-found", "교실 배치가 없습니다.");
         const current = snap.data();
         const revision = Number(current.editorRevision) || 0;
@@ -94,10 +105,32 @@ exports.saveRealEstateAssignments = onCall({ region: "asia-northeast3" }, async 
         if (revision !== expectedRevision) {
             throw new HttpsError("aborted", "다른 관리자가 좌석 배정을 수정했습니다. 화면을 새로고침한 뒤 다시 확인해 주세요.");
         }
+        // 앉은 학생이 바뀌는 자리의 임대 계약은 이 저장 안에서 자동 정산한다.
+        const { groups: settledGroups, settlements } = await stageSeatChangeRentSettlements({
+            transaction,
+            db,
+            classId,
+            currentGroups: current.groups,
+            proposedGroups: groups,
+            actorUid: request.auth.uid,
+            deps: {
+                FieldValue,
+                Timestamp,
+                startOfDayInKST,
+                toDate,
+                stageActivityLog,
+                stageTaxExpense,
+                logContext: {
+                    config: globalConfig,
+                    planType: classSnap.data()?.planType || "FREE",
+                    serviceName: "realestate",
+                },
+            },
+        });
         let nextGroups;
         let safeConstraints;
         try {
-            nextGroups = mergeAssignments(current.groups, groups);
+            nextGroups = mergeAssignments(settledGroups, groups);
             safeConstraints = validateConstraints(constraints);
         } catch (error) {
             throw new HttpsError("failed-precondition", error.message);
@@ -109,7 +142,17 @@ exports.saveRealEstateAssignments = onCall({ region: "asia-northeast3" }, async 
             lastEditorRequestHash: payloadHash,
         });
         transaction.set(groupingRef, buildGrouping(nextGroups, updatedAt));
-        return { revision: revision + 1 };
+        return {
+            revision: revision + 1,
+            rentSettlements: settlements.map((item) => ({
+                deskId: item.deskId,
+                cleared: item.cleared === true,
+                refundAmount: item.tenantReceives || 0,
+                forgivenRentAmount: item.forgivenRentAmount || 0,
+                depositDeductionAmount: item.depositDeduction || 0,
+                pendingAmount: item.pendingDepositAmount || 0,
+            })),
+        };
     });
 });
 

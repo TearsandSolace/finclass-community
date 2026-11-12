@@ -37,7 +37,10 @@ export const getRentManagementStatus = (desk) => {
     unpaidRentAmount: hasContract && !closed ? (rent.amountDue ?? rent.overdueAmount) : 0,
     depositUnpaid: Math.max(0, (Number(desk.rentDepositAmount) || 0) - depositPaid),
     daysRemaining: end && today ? Math.max(0, Math.floor((end - today) / 86400000) + 1) : null,
-    period: start && end ? `${formatDateKeyInKST(start)} ~ ${formatDateKeyInKST(end)}` : '기간 미설정',
+    openEnded: desk.rentOpenEnded === true,
+    period: start && end
+      ? `${formatDateKeyInKST(start)} ~ ${desk.rentOpenEnded === true ? '자리 바꿀 때까지' : formatDateKeyInKST(end)}`
+      : '기간 미설정',
     weeklyRent: getWeeklyRentAmount(desk), isJeonse: desk.rentType === 'jeonse', status: { label: state[0], tone: state[1] } };
 };
 

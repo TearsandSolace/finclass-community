@@ -91,7 +91,7 @@ const RentManagementOverview = ({ groups = [], placementData, formatCurrency, on
           ['임차인', focused.hasContract ? focused.tenantName : '계약 없음'],
           ['앉은 학생', focused.desk.studentName || '미배정'], ['소유자', focused.desk.ownerName || '국가'],
           ['계약 기간', focused.period], ['주 임대료', focused.isJeonse ? '전세 (임대료 없음)' : formatCurrency(focused.weeklyRent)],
-          ['남은 기간', focused.daysRemaining == null ? '기간 확인 필요' : focused.expired ? '만료' : `${focused.daysRemaining}일`],
+          ['남은 기간', focused.openEnded ? '자리 바꿀 때까지' : focused.daysRemaining == null ? '기간 확인 필요' : focused.expired ? '만료' : `${focused.daysRemaining}일`],
           ['미납 임대료', `${formatCurrency(focused.unpaidRentAmount)}${focused.overdue ? ` · ${focused.rent.overdueDays || 0}일 연체` : ''}`],
           ['보증금 납부', formatCurrency(focused.depositPaid)], ['보증금 미납', formatCurrency(focused.depositUnpaid)],
           ['반환 필요 보증금', formatCurrency(focused.expired || focused.closed || focused.returnPending ? focused.depositOutstanding : 0)],

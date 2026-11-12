@@ -786,6 +786,8 @@ const buildUpdatedRentContractDesk = async ({
         ...targetDesk,
         weeklyRent,
         rentType: nextRentType,
+        // 끝 날짜 없이 자리를 바꿀 때까지 이어지는 계약(내부 마지막일은 넉넉히 잡아 둔다)
+        rentOpenEnded: payload.rentOpenEnded === true,
         rentContractId: nextRentContractId,
         rentStartAt: admin.firestore.Timestamp.fromDate(parsedRentStartDate),
         rentLastDateAt: admin.firestore.Timestamp.fromDate(parsedRentLastDate),
@@ -4721,6 +4723,7 @@ exports.updateRealEstateRentContractsBulk = onCall(async (request) => {
         rentStartDateKey,
         rentLastDateKey,
         rentType,
+        rentOpenEnded,
     } = request.data || {};
 
     if (!classId) {
@@ -4798,6 +4801,7 @@ exports.updateRealEstateRentContractsBulk = onCall(async (request) => {
         const bulkPayload = {
             weeklyRent,
             rentType,
+            rentOpenEnded,
             rentStartDateKey,
             rentLastDateKey,
             ...(depositAmount === undefined ? {} : { depositAmount }),

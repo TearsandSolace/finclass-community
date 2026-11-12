@@ -11,10 +11,12 @@ import {
 import { useFeedback } from '../../../../contexts/FeedbackContext';
 import { useUser } from '../../../../contexts/UserContext';
 import {
+  addCalendarDaysInKST,
   formatDateKeyInKST,
   parseDateKeyAsKST,
   startOfDayInKST,
 } from '../../../../utils/kstDate';
+
 import { useRealEstate } from '../../hooks/useRealEstate';
 import {
   calculateCumulativeRentCharge,
@@ -24,6 +26,10 @@ import {
 } from '../../utils/rentStatus';
 import { Button } from '../../../../components/ui';
 import RentHistoryModal from './RentHistoryModal';
+
+// '자리 바꿀 때까지' 계약은 끝 날짜를 받지 않고 내부 마지막일만 넉넉히(1년) 잡는다.
+// 실제 종료와 정산은 선생님이 자리를 바꿔 저장할 때 자동으로 처리된다.
+const OPEN_ENDED_CONTRACT_DAYS = 364;
 
 const PAYMENT_PRESETS = [7, 14, 28];
 
@@ -94,6 +100,8 @@ const RentManager = ({
   const [settlementReason, setSettlementReason] = useState('');
   const [startDateInput, setStartDateInput] = useState('');
   const [lastDateInput, setLastDateInput] = useState('');
+  const isOpenEnded = desk?.rentOpenEnded === true;
+  const [openEndedInput, setOpenEndedInput] = useState(desk?.rentContractId ? isOpenEnded : true);
   const [paymentDaysInput, setPaymentDaysInput] = useState('7');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isEditingContract, setIsEditingContract] = useState(false);
@@ -108,6 +116,7 @@ const RentManager = ({
     setDepositInput(String(Number(desk?.rentDepositAmount || 0)));
     setStartDateInput(rentStartDateKey);
     setLastDateInput(contractLastDateKey);
+    setOpenEndedInput(desk?.rentContractId ? desk?.rentOpenEnded === true : true);
 
     const suggestedDays = hasActiveContract
       ? Math.max(
@@ -122,7 +131,9 @@ const RentManager = ({
   }, [
     contractLastDateKey,
     desk?.id,
+    desk?.rentContractId,
     desk?.rentDepositAmount,
+    desk?.rentOpenEnded,
     hasActiveContract,
     isJeonse,
     remainingContractDays,
@@ -237,8 +248,14 @@ const RentManager = ({
 
     if (isContractInput) {
       const parsedStartDate = startOfDayInKST(parseDateKeyAsKST(startDateInput));
-      const parsedLastDate = startOfDayInKST(parseDateKeyAsKST(lastDateInput));
+      const parsedLastDate = openEndedInput && parsedStartDate
+        ? addCalendarDaysInKST(parsedStartDate, OPEN_ENDED_CONTRACT_DAYS)
+        : startOfDayInKST(parseDateKeyAsKST(lastDateInput));
 
+      if (openEndedInput && !parsedStartDate) {
+        showFeedback('계약 시작일을 입력해주세요.', 'error');
+        return;
+      }
       if (!parsedStartDate || !parsedLastDate) {
         showFeedback('계약 시작일과 실제거주 마지막일을 모두 입력해주세요.', 'error');
         return;
@@ -256,6 +273,7 @@ const RentManager = ({
     const contractPayload = {
       weeklyRent: numericRent,
       rentType: isJeonseInput ? 'jeonse' : 'monthly',
+      rentOpenEnded: openEndedInput,
       rentStartDateKey,
       rentLastDateKey,
       depositAmount: numericDeposit,
@@ -389,7 +407,9 @@ const RentManager = ({
   } else if (amountDue > 0) {
     statusLabel = `임대료 ${formatCurrency(amountDue)} 납부가 필요합니다.`;
   } else if (hasActiveContract) {
-    statusLabel = `${formatDateLabel(contractLastDate)}까지 계약 · 정상 납부 중`;
+    statusLabel = isOpenEnded
+      ? '자리 바꿀 때까지 계약 · 정상 납부 중'
+      : `${formatDateLabel(contractLastDate)}까지 계약 · 정상 납부 중`;
   } else if (paidUntilDate) {
     statusLabel = `${formatDateLabel(paidUntilDate)} 기준으로 납부되어 있습니다.`;
   }
@@ -444,7 +464,7 @@ const RentManager = ({
                     </div>
                     <div>
                       <p className="mb-1 text-[10px] font-bold uppercase text-slate-400">계약 기간</p>
-                      <p>{formatDateLabel(rentStartDate)} ~ {formatDateLabel(contractLastDate)}</p>
+                      <p>{formatDateLabel(rentStartDate)} ~ {isOpenEnded ? '자리 바꿀 때까지' : formatDateLabel(contractLastDate)}</p>
                     </div>
                     <div>
                       <p className="mb-1 text-[10px] font-bold uppercase text-slate-400">{isJeonse ? '전세 보증금' : '주 임대료'}</p>
@@ -537,7 +557,7 @@ const RentManager = ({
                 </div>
                 <div className="rounded-xl border border-slate-100 bg-white p-3">
                   <p className="mb-1 text-[10px] font-bold uppercase text-slate-400">남은 계약 기간</p>
-                  <p className="text-base font-black text-slate-800">{jeonseDaysLeft}일</p>
+                  <p className="text-base font-black text-slate-800">{isOpenEnded ? '자리 바꿀 때까지' : `${jeonseDaysLeft}일`}</p>
                   <p className="mt-1 text-[11px] font-semibold text-slate-500">끝나면 보증금 반환</p>
                 </div>
               </div>
@@ -562,7 +582,7 @@ const RentManager = ({
                     ? formatCurrency(overdueAmount)
                     : amountDue > 0
                       ? formatCurrency(amountDue)
-                      : `${remainingContractDays || 0}일`}
+                      : isOpenEnded ? '자리 바꿀 때까지' : `${remainingContractDays || 0}일`}
                 </p>
                 <p className="mt-1 text-[11px] font-semibold text-slate-500">
                   {isOverdue
@@ -794,6 +814,16 @@ const RentManager = ({
             </label>
           </div>
 
+          <label className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white/70 px-3 py-2 text-[12px] font-bold text-amber-900">
+            <input
+              type="checkbox"
+              checked={openEndedInput}
+              onChange={(event) => setOpenEndedInput(event.target.checked)}
+              className="h-4 w-4 accent-amber-600"
+            />
+            자리 바꿀 때까지 (끝 날짜 없음 · 자리 바꿔 저장하면 자동 정산)
+          </label>
+
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-[11px] font-bold text-amber-800">계약 시작일</span>
@@ -805,6 +835,12 @@ const RentManager = ({
                 className="w-full rounded-xl border border-amber-200 bg-blue-50/50 px-3 py-2 text-sm font-semibold outline-none focus:border-amber-400 disabled:cursor-not-allowed disabled:bg-slate-100"
               />
             </label>
+            {openEndedInput ? (
+              <div className="space-y-1">
+                <span className="text-[11px] font-bold text-amber-800">실제거주 마지막일</span>
+                <p className="rounded-xl border border-amber-200 bg-white/70 px-3 py-2 text-sm font-bold text-slate-500">자리 바꿀 때까지</p>
+              </div>
+            ) : (
             <label className="space-y-1">
               <span className="text-[11px] font-bold text-amber-800">실제거주 마지막일</span>
               <input
@@ -816,6 +852,7 @@ const RentManager = ({
                 className="w-full rounded-xl border border-amber-200 bg-blue-50/50 px-3 py-2 text-sm font-semibold outline-none focus:border-amber-400 disabled:cursor-not-allowed disabled:bg-slate-100"
               />
             </label>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg border border-amber-200 bg-white/80 px-3 py-2 text-[11px] font-semibold text-amber-800">
