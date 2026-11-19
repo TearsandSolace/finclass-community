@@ -328,9 +328,11 @@ const Store = () => {
   const processedStudentsList = useMemo(() => {
     if (!posStudents.length) return [];
 
-    const pureStudents = posStudents.filter(
-      (student) => student.uid !== userData?.uid,
-    );
+    // 선생님만 목록에서 빼고(아래에서 선생님 계정으로 따로 넣음),
+    // 상점관리자 학생은 자기 자신도 포스로 결제할 수 있게 목록에 남긴다.
+    const pureStudents = isTeacher
+      ? posStudents.filter((student) => student.uid !== userData?.uid)
+      : posStudents;
     const sorted = [...pureStudents].sort(
       (a, b) => (a.studentNumber || 0) - (b.studentNumber || 0),
     );
