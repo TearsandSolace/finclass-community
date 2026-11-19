@@ -180,10 +180,8 @@ export default function AppLayout({
     userData?.role === "teacher" || userData?.role === "admin",
     userData?.role,
   );
-  const canUsePageHelper =
-    userData?.isAdmin ||
-    userData?.role === "teacher" ||
-    userData?.role === "admin";
+  // 우리 학급은 선생님 혼자 쓰므로 페이지 도우미(퀘스트·가이드 투어)를 모든 화면에서 끈다.
+  const canUsePageHelper = false;
   const activePageGuide =
     canUsePageHelper && pageGuide?.type === "quest" ? pageGuide : null;
   const activeFallbackTutorial =
