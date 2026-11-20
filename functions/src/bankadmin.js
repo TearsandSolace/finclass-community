@@ -424,6 +424,15 @@ exports.approveBankApplications = onCall(
                     app.interestCalculatedOnRequest ??
                     0,
                 ),
+                ...(app.interestModel === "upfront" && {
+                  interestModel: "upfront",
+                  interestState: {
+                    accruedAmount: Number(app.normalInterestAmount ?? 0),
+                    paidAmount: 0,
+                    waivedAmount: 0,
+                    baseDate: startTs,
+                  },
+                }),
                 ...(app.interestModel === "declining_balance" && {
                   interestModel: "declining_balance",
                   interestState: {

@@ -51,7 +51,7 @@ export default function RepayModal({
     const principalTotal = Number(loan.principal || loan.amount || 0);
     const principalLeft = Number(loan.amountLeft ?? principalTotal);
 
-    // 이자 (일할 계산)
+    // 이자 (대출 즉시 전액 또는 예전 대출은 일할 계산)
     const interestDue =
       loan.status === "ongoing"
         ? calculateLoanInterestDue(loan, now).interestDue

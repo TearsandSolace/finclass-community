@@ -74,6 +74,13 @@ function isDecliningBalanceLoan(loan = {}) {
     return loan.interestModel === "declining_balance";
 }
 
+// 대출 즉시 약정 이자 전액이 생기는 방식 (일수에 따라 나눠 쌓지 않음)
+const UPFRONT_INTEREST_MODEL = "upfront";
+
+function isUpfrontInterestLoan(loan = {}) {
+    return loan.interestModel === UPFRONT_INTEREST_MODEL;
+}
+
 function getDecliningInterestBaseDate(loan = {}) {
     return (
         toDayjsLike(loan.interestState?.baseDate) ||
@@ -906,7 +913,7 @@ exports.applyLoan = onCall({ region: "asia-northeast3" }, async (request) => {
             const loanData = {
                 amount: amt,
                 interestLeft: normalInterestAmount,
-                interestModel: "declining_balance",
+                interestModel: UPFRONT_INTEREST_MODEL,
                 principal: amt, // 원금
                 normalInterestAmount, // 총 약정 이자
                 overdueRate, // 일일 벌금율 (%)
@@ -939,7 +946,7 @@ exports.applyLoan = onCall({ region: "asia-northeast3" }, async (request) => {
             admin.firestore.Timestamp.fromDate(expectedRepaymentDate),
                     amountLeft: amt,
                     interestState: {
-                        accruedAmount: 0,
+                        accruedAmount: normalInterestAmount,
                         paidAmount: 0,
                         waivedAmount: 0,
                         baseDate: startedAt,
@@ -1413,12 +1420,20 @@ exports.repayLoan = onCall({ region: "asia-northeast3" }, async (request) => {
             const totalDays = Number(loan.days || 1);
             const overdueRate = Number(loan.overdueRate || 0);
             const useDecliningInterest = isDecliningBalanceLoan(loan);
+            const useUpfrontInterest = isUpfrontInterestLoan(loan);
 
             // 3. 이자 계산 (일할 누적)
             let interestCalc = null;
             let interestDue = 0;
 
-            if (useDecliningInterest) {
+            if (useUpfrontInterest) {
+                // 대출받는 순간 약정 이자 전액이 생겨 있다.
+                const waivedAmount = Number(loan.interestState?.waivedAmount || 0);
+                interestDue = Math.max(
+                    0,
+                    normalInterestTotal - interestPaid - waivedAmount,
+                );
+            } else if (useDecliningInterest) {
                 interestCalc = calculateDecliningLoanInterest(loan, now);
                 interestDue = interestCalc.interestDue;
             } else {

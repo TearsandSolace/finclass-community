@@ -21,6 +21,11 @@ export function isDecliningBalanceLoan(loan = {}) {
   return loan.interestModel === "declining_balance";
 }
 
+// 대출 즉시 약정 이자 전액이 생기는 방식
+export function isUpfrontInterestLoan(loan = {}) {
+  return loan.interestModel === "upfront";
+}
+
 export function getLoanPrincipal(loan = {}) {
   return toSafeNumber(loan.principal ?? loan.amount);
 }
@@ -82,6 +87,21 @@ export function calculateLoanInterestDue(loan = {}, now = new Date()) {
       newlyAccrued: 0,
       paidAmount: toSafeNumber(loan.interestPaid),
       waivedAmount: toSafeNumber(loan.interestState?.waivedAmount),
+    };
+  }
+
+  if (isUpfrontInterestLoan(loan)) {
+    const totalInterest = getLoanTotalInterest(loan);
+    const paidAmount = toSafeNumber(loan.interestPaid);
+    const waivedAmount = toSafeNumber(loan.interestState?.waivedAmount);
+
+    return {
+      accruedAmount: totalInterest,
+      elapsedDays: 0,
+      interestDue: Math.max(0, totalInterest - paidAmount - waivedAmount),
+      newlyAccrued: 0,
+      paidAmount,
+      waivedAmount,
     };
   }
 

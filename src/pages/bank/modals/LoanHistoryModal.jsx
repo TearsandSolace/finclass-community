@@ -279,7 +279,7 @@ export default function LoanHistoryModal({
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-[10px] text-slate-400 font-bold">
-                            밀린 이자 (일할)
+                            남은 이자
                           </span>
                           <span
                             className={`text-xs font-bold ${interestDue > 0 ? "text-blue-600" : "text-slate-400"}`}
